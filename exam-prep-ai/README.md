@@ -24,7 +24,7 @@ cp .env.example .env.local
 
 - `NEXTAUTH_SECRET` (long random string)
 - `NEXTAUTH_URL` (use `http://localhost:3000` for local dev)
-- `DATABASE_URL` (default SQLite: `file:./dev.db`)
+- `DATABASE_URL` (PostgreSQL connection string from Neon/Supabase/Railway)
 - `OPENROUTER_API_KEY`
 - `LLAMACLOUD_API_KEY` (or `LLAMAPARSE_API_KEY`)
 - `LLAMAPARSE_VENDOR_MULTIMODAL_MODEL_NAME` (optional, default `openrouter/auto`)
