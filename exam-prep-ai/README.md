@@ -1,36 +1,98 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Exam Prep AI (ExamOS)
 
-## Getting Started
+ExamOS is a Next.js study workspace for exam prep with:
 
-First, run the development server:
+- Source upload and parsing for past papers
+- Source-grounded AI chat and generation
+- Real account authentication (email + password)
+- Tool windows for answer key, grading, marking rules, topic prediction, and timed practice
+
+## 1. Prerequisites
+
+- Node.js 20+
+- npm
+
+## 2. Environment Setup
+
+1. Create a local environment file:
+
+```bash
+cp .env.example .env.local
+```
+
+2. Fill these values in `.env.local`:
+
+- `NEXTAUTH_SECRET` (long random string)
+- `NEXTAUTH_URL` (use `http://localhost:3000` for local dev)
+- `DATABASE_URL` (default SQLite: `file:./dev.db`)
+- `OPENROUTER_API_KEY`
+- `LLAMACLOUD_API_KEY` (or `LLAMAPARSE_API_KEY`)
+- `LLAMAPARSE_VENDOR_MULTIMODAL_MODEL_NAME` (optional, default `openrouter/auto`)
+
+## 3. Install and Initialize
+
+Install packages:
+
+```bash
+npm install
+```
+
+Generate Prisma client:
+
+```bash
+npx prisma generate
+```
+
+Create/update the local database:
+
+```bash
+npx prisma db push
+```
+
+## 4. Run Locally
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open http://localhost:3000
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## 5. Auth Flow (Real Accounts)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Use the sign-in screen in the app.
+- If you do not have an account, switch to Create account mode.
+- Accounts are stored in the configured Prisma database.
 
-## Learn More
+## 6. Quality Checks
 
-To learn more about Next.js, take a look at the following resources:
+Run lint:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run lint
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+Run production build:
 
-## Deploy on Vercel
+```bash
+npm run build
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## 7. Git Safety
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- Do not commit `.env.local`
+- `.gitignore` already excludes environment files, build artifacts, and dependencies
+- Commit `.env.example` only
+
+## 8. Suggested Git Workflow
+
+1. Create a feature branch
+2. Commit focused changes
+3. Push branch
+4. Open a pull request into `main`
+
+## 9. First Push Checklist
+
+1. `npm run lint` passes
+2. `npm run build` passes
+3. `.env.local` is not staged
+4. Commit message is clear
