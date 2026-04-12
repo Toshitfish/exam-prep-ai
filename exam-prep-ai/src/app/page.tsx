@@ -2386,13 +2386,13 @@ ${getSourceContext()}
                         const messageText = isStreamingAssistantMessage ? animatedWorkspaceText || rawMessageText : rawMessageText;
 
                         return (
-                          <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                          <div key={m.id} className={`mb-2 flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                             <div
-                              className={`max-w-[94%] rounded-2xl px-4 py-3 ${
+                              className={
                                 m.role === "user"
-                                  ? "bg-orange-500 text-white"
-                                  : "bg-transparent text-slate-800"
-                              }`}
+                                  ? "max-w-[78%] rounded-[20px] bg-orange-500 px-4 py-2.5 text-[14px] leading-6 text-white shadow-[0_8px_20px_rgba(249,115,22,0.22)] md:max-w-[70%] lg:max-w-[64%]"
+                                  : "max-w-[94%] rounded-2xl bg-transparent px-3.5 py-2.5 text-slate-800"
+                              }
                             >
                               {isStreamingAssistantMessage ? (
                                 <div className="memo-response app-ui-content prose prose-sm max-w-none prose-slate prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-li:my-1 text-[14px] leading-6">
