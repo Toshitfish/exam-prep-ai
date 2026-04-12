@@ -1998,16 +1998,63 @@ export default function Home() {
       return true;
     }
 
-    const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
-    if (!printWindow) {
+    const printUsingHiddenFrame = (htmlMarkup: string) => {
+      try {
+        const frame = document.createElement("iframe");
+        frame.style.position = "fixed";
+        frame.style.right = "0";
+        frame.style.bottom = "0";
+        frame.style.width = "0";
+        frame.style.height = "0";
+        frame.style.border = "0";
+        frame.setAttribute("aria-hidden", "true");
+
+        const cleanup = () => {
+          if (frame.parentNode) {
+            frame.parentNode.removeChild(frame);
+          }
+        };
+
+        frame.onload = () => {
+          const frameWindow = frame.contentWindow;
+          if (!frameWindow) {
+            cleanup();
+            return;
+          }
+
+          const onAfterPrint = () => {
+            frameWindow.removeEventListener("afterprint", onAfterPrint);
+            cleanup();
+          };
+
+          frameWindow.addEventListener("afterprint", onAfterPrint);
+          frameWindow.focus();
+          window.setTimeout(() => {
+            frameWindow.print();
+          }, 40);
+
+          window.setTimeout(cleanup, 20000);
+        };
+
+        document.body.appendChild(frame);
+        const doc = frame.contentDocument;
+        if (!doc) {
+          cleanup();
+          return false;
+        }
+
+        doc.open();
+        doc.write(htmlMarkup);
+        doc.close();
+        return true;
+      } catch {
+        return false;
+      }
+    };
+
+    if (!printUsingHiddenFrame(html)) {
       return false;
     }
-
-    printWindow.document.open();
-    printWindow.document.write(html);
-    printWindow.document.close();
-    printWindow.focus();
-    printWindow.print();
     return true;
   };
 
@@ -2128,14 +2175,56 @@ export default function Home() {
         URL.revokeObjectURL(url);
         ok = true;
       } else {
-        const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
-        if (printWindow) {
-          printWindow.document.open();
-          printWindow.document.write(previewHtml);
-          printWindow.document.close();
-          printWindow.focus();
-          printWindow.print();
-          ok = true;
+        const frame = document.createElement("iframe");
+        frame.style.position = "fixed";
+        frame.style.right = "0";
+        frame.style.bottom = "0";
+        frame.style.width = "0";
+        frame.style.height = "0";
+        frame.style.border = "0";
+        frame.setAttribute("aria-hidden", "true");
+
+        const cleanup = () => {
+          if (frame.parentNode) {
+            frame.parentNode.removeChild(frame);
+          }
+        };
+
+        frame.onload = () => {
+          const frameWindow = frame.contentWindow;
+          if (!frameWindow) {
+            cleanup();
+            return;
+          }
+
+          const onAfterPrint = () => {
+            frameWindow.removeEventListener("afterprint", onAfterPrint);
+            cleanup();
+          };
+
+          frameWindow.addEventListener("afterprint", onAfterPrint);
+          frameWindow.focus();
+          window.setTimeout(() => {
+            frameWindow.print();
+          }, 40);
+
+          window.setTimeout(cleanup, 20000);
+        };
+
+        try {
+          document.body.appendChild(frame);
+          const doc = frame.contentDocument;
+          if (doc) {
+            doc.open();
+            doc.write(previewHtml);
+            doc.close();
+            ok = true;
+          } else {
+            cleanup();
+          }
+        } catch {
+          cleanup();
+          ok = false;
         }
       }
     } else {
@@ -2144,7 +2233,7 @@ export default function Home() {
     }
 
     if (!ok) {
-      setAnswerKeyError("Popup blocked. Please allow popups to export PDF.");
+      setAnswerKeyError("Unable to open print dialog. Please check browser print permissions and try again.");
     }
   };
 
