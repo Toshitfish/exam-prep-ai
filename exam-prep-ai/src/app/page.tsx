@@ -985,6 +985,8 @@ export default function Home() {
       });
     };
 
+    let didFail = false;
+
     try {
       const { status, result } = await requestParse();
 
@@ -1010,6 +1012,7 @@ export default function Home() {
       setActiveSourceId(newSource.id);
       setSourceText(parsedText);
     } catch (error) {
+      didFail = true;
       const message = error instanceof Error ? error.message : "Unknown parsing error.";
       setSourceText(`> Parsing failed\n\n${message}`);
       setParseDiagnostics(null);
@@ -1017,14 +1020,14 @@ export default function Home() {
       setParseProgress(0);
     } finally {
       setIsParsing(false);
-      if (parseStage !== "failed") {
-        window.setTimeout(() => {
+      window.setTimeout(() => {
+        if (!didFail) {
           setParseProgress(0);
-          setParseStage("idle");
-        }, 900);
-      }
+        }
+        setParseStage("idle");
+      }, didFail ? 1600 : 900);
     }
-  }, [parseStage]);
+  }, []);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -1965,6 +1968,21 @@ ${getSourceContext()}
             )}
           </div>
         </header>
+
+        {isParsing ? (
+          <div className="border-b border-indigo-100 bg-indigo-50/70 px-6 py-2">
+            <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-indigo-700">
+              <span>{parseStage === "uploading" ? "Uploading PDF" : "Extracting text"}</span>
+              <span>{Math.max(1, Math.min(100, parseProgress))}%</span>
+            </div>
+            <div className="h-1.5 overflow-hidden rounded-full bg-indigo-100">
+              <div
+                className="h-full rounded-full bg-indigo-500 transition-all duration-300"
+                style={{ width: `${Math.max(1, Math.min(100, parseProgress))}%` }}
+              />
+            </div>
+          </div>
+        ) : null}
 
         <div
           className={`grid min-h-0 flex-1 grid-cols-1 gap-0 ${
