@@ -34,7 +34,7 @@ const buildChatPanelPolicy = (userName: string) =>
     "When helpful, end with a short checklist the user can act on immediately.",
   ].join(" ");
 
-const MAX_RECENT_MESSAGES = 2;
+const MAX_RECENT_MESSAGES = 1;
 const MAX_LATEST_SOURCE_CHARS = 9000;
 const MAX_OLDER_ASSISTANT_CHARS = 1400;
 const MAX_LATEST_ASSISTANT_CHARS = 2200;
@@ -78,7 +78,6 @@ const compactChatMessages = (messages: UIMessage[]) => {
     return [] as UIMessage[];
   }
 
-  const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
   const latestUserCompacted: UIMessage = {
     ...latestUser,
     parts: latestUser.parts.map((part) => {
@@ -93,25 +92,7 @@ const compactChatMessages = (messages: UIMessage[]) => {
     }),
   };
 
-  if (!latestAssistant) {
-    return [latestUserCompacted];
-  }
-
-  const assistantCompacted: UIMessage = {
-    ...latestAssistant,
-    parts: latestAssistant.parts.map((part) => {
-      if (part.type !== "text") {
-        return part;
-      }
-
-      return {
-        ...part,
-        text: trimText(part.text ?? "", MAX_OLDER_ASSISTANT_CHARS),
-      };
-    }),
-  };
-
-  return [assistantCompacted, latestUserCompacted].slice(-MAX_RECENT_MESSAGES);
+  return [latestUserCompacted].slice(-MAX_RECENT_MESSAGES);
 };
 
 export async function POST(req: Request) {

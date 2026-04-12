@@ -697,6 +697,7 @@ export default function Home() {
   const [workspaceReadyToSave, setWorkspaceReadyToSave] = useState(false);
   const [animatedWorkspaceText, setAnimatedWorkspaceText] = useState("");
   const lastAnimatedAssistantId = useRef<string | null>(null);
+  const sourcePdfUrlsRef = useRef<Record<string, string>>({});
 
   const buildLearnerProfileContext = () => {
     const safeName = learnerName.trim() || "Scholar";
@@ -724,12 +725,16 @@ export default function Home() {
   }, [session?.user?.name]);
 
   useEffect(() => {
+    sourcePdfUrlsRef.current = sourcePdfUrls;
+  }, [sourcePdfUrls]);
+
+  useEffect(() => {
     return () => {
-      Object.values(sourcePdfUrls).forEach((url) => {
+      Object.values(sourcePdfUrlsRef.current).forEach((url) => {
         URL.revokeObjectURL(url);
       });
     };
-  }, [sourcePdfUrls]);
+  }, []);
 
   useEffect(() => {
     if (answerKeyLoading || mockPaperChatLoading || mockPaperEditQueue.length === 0) {
@@ -840,6 +845,7 @@ export default function Home() {
         setIsParsing(false);
         setParseDiagnostics(null);
         setSourceLibrary(nextSources);
+        setSourcePdfUrls({});
         setActiveSourceId(persistedActiveId);
         setSourceText(
           typeof workspace.sourceText === "string"
@@ -2643,6 +2649,9 @@ ${getSourceContext()}
                     ) : null}
                     {workspaceStatus === "streaming" ? (
                       <p className="chat-status-line text-sm font-medium text-orange-500">Drafting detailed response</p>
+                    ) : null}
+                    {workspaceStatus === "error" ? (
+                      <p className="text-sm font-medium text-rose-500">Response failed. Please resend your question.</p>
                     ) : null}
                   </div>
                   <div
