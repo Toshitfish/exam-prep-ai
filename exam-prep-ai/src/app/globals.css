@@ -35,3 +35,45 @@ textarea,
   user-select: text;
   -webkit-user-select: text;
 }
+
+.chat-status-line::after {
+  content: "";
+  animation: chat-ellipsis 1.2s steps(4, end) infinite;
+}
+
+.chat-typing-cursor::after {
+  content: "";
+  display: inline-block;
+  width: 0.55ch;
+  margin-left: 1px;
+  border-right: 2px solid rgb(99 102 241);
+  animation: chat-caret 0.9s step-end infinite;
+  vertical-align: baseline;
+}
+
+@keyframes chat-ellipsis {
+  0% {
+    content: "";
+  }
+  25% {
+    content: ".";
+  }
+  50% {
+    content: "..";
+  }
+  75%,
+  100% {
+    content: "...";
+  }
+}
+
+@keyframes chat-caret {
+  0%,
+  45% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}

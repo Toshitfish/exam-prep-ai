@@ -595,7 +595,7 @@ export default function Home() {
     messages: workspaceMessages,
     sendMessage: sendWorkspaceMessage,
     status: workspaceStatus,
-  } = useChat({ id: "workspace-chat", experimental_throttle: 80 });
+  } = useChat({ id: "workspace-chat", experimental_throttle: 24 });
   const {
     messages: gradingMessages,
     sendMessage: sendGradingMessage,
@@ -682,6 +682,8 @@ export default function Home() {
   const [authError, setAuthError] = useState<string | null>(null);
   const hasHydratedWorkspace = useRef(false);
   const [workspaceReadyToSave, setWorkspaceReadyToSave] = useState(false);
+  const [animatedWorkspaceText, setAnimatedWorkspaceText] = useState("");
+  const lastAnimatedAssistantId = useRef<string | null>(null);
 
   const buildLearnerProfileContext = () => {
     const safeName = learnerName.trim() || "Scholar";
@@ -1771,6 +1773,10 @@ Use only the uploaded source context below to answer.
 - If information is not present, say: "Not found in uploaded source."
 - Do not use outside facts.
 - Cite section/question labels from the source when possible.
+  - Provide a detailed and structured response using markdown headings.
+  - Preferred structure: ## Direct Answer, ## Source Evidence, ## Key Details, ## Exam Tip.
+  - Under Source Evidence, quote or paraphrase specific source lines/labels that support each claim.
+  - If the prompt is simple, keep Direct Answer short but still include supporting evidence.
 
   Learner profile:
   ${buildLearnerProfileContext()}
@@ -1901,9 +1907,49 @@ ${getSourceContext()}
 
   const latestAssistantMessage = [...gradingMessages].reverse().find((message) => message.role === "assistant");
   const latestAssistantFeedback = latestAssistantMessage ? getMessageText(latestAssistantMessage) : "";
+  const latestWorkspaceAssistantMessage = [...workspaceMessages].reverse().find((message) => message.role === "assistant");
   const latestWorkspaceAssistantId = [...workspaceMessages].reverse().find((message) => message.role === "assistant")?.id;
+  const latestWorkspaceAssistantText = latestWorkspaceAssistantMessage ? getMessageText(latestWorkspaceAssistantMessage) : "";
   const scoreSourceText = (gradingFeedbackDraft || latestAssistantFeedback).trim();
   const scoreMatch = scoreSourceText.match(/(\d+)\s*\/\s*(\d+)/);
+
+  useEffect(() => {
+    if (latestWorkspaceAssistantId === lastAnimatedAssistantId.current) {
+      return;
+    }
+
+    lastAnimatedAssistantId.current = latestWorkspaceAssistantId ?? null;
+    setAnimatedWorkspaceText("");
+  }, [latestWorkspaceAssistantId]);
+
+  useEffect(() => {
+    if (workspaceStatus === "streaming") {
+      return;
+    }
+
+    setAnimatedWorkspaceText(latestWorkspaceAssistantText);
+  }, [workspaceStatus, latestWorkspaceAssistantText]);
+
+  useEffect(() => {
+    if (workspaceStatus !== "streaming" || !latestWorkspaceAssistantId) {
+      return;
+    }
+
+    const timer = window.setInterval(() => {
+      setAnimatedWorkspaceText((current) => {
+        const target = latestWorkspaceAssistantText;
+        if (current.length >= target.length) {
+          return current;
+        }
+
+        const remaining = target.length - current.length;
+        const step = remaining > 220 ? 9 : remaining > 120 ? 6 : remaining > 40 ? 3 : 1;
+        return target.slice(0, current.length + step);
+      });
+    }, 16);
+
+    return () => window.clearInterval(timer);
+  }, [workspaceStatus, latestWorkspaceAssistantId, latestWorkspaceAssistantText]);
 
   useEffect(() => {
     if (isEditingGradingFeedback) {
@@ -2283,9 +2329,10 @@ ${getSourceContext()}
                       </div>
                     ) : (
                       workspaceMessages.map((m) => {
-                        const messageText = getWorkspaceDisplayText(getMessageText(m), m.role);
+                        const rawMessageText = getWorkspaceDisplayText(getMessageText(m), m.role);
                         const isStreamingAssistantMessage =
                           workspaceIsLoading && m.role === "assistant" && m.id === latestWorkspaceAssistantId;
+                        const messageText = isStreamingAssistantMessage ? animatedWorkspaceText || rawMessageText : rawMessageText;
 
                         return (
                           <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
@@ -2297,7 +2344,7 @@ ${getSourceContext()}
                               }`}
                             >
                               {isStreamingAssistantMessage ? (
-                                <pre className="app-ui-content whitespace-pre-wrap break-words text-[15px] leading-7 text-slate-700">{messageText}</pre>
+                                <pre className="app-ui-content chat-typing-cursor whitespace-pre-wrap break-words text-[15px] leading-7 text-slate-700">{messageText}</pre>
                               ) : (
                                 <div className="app-ui-content prose prose-sm md:prose-base max-w-none prose-indigo leading-7">
                                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{messageText}</ReactMarkdown>
@@ -2308,7 +2355,12 @@ ${getSourceContext()}
                         );
                       })
                     )}
-                    {workspaceIsLoading && <p className="animate-pulse text-sm text-indigo-500">Generating...</p>}
+                    {workspaceStatus === "submitted" ? (
+                      <p className="chat-status-line text-sm font-medium text-indigo-500">Analysing source...</p>
+                    ) : null}
+                    {workspaceStatus === "streaming" ? (
+                      <p className="chat-status-line text-sm font-medium text-indigo-500">Typing detailed response...</p>
+                    ) : null}
                   </div>
                   <div
                     className={`pointer-events-none mt-2 ${
