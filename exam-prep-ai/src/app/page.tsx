@@ -620,6 +620,10 @@ export default function Home() {
     answerKeyOutput: string;
     gradingFeedbackDraft: string;
     topicPredictorDraft: string;
+    mockPaperDifficulty: "balanced" | "exam-hard" | "mostly-medium";
+    timedSectionName: string;
+    timedMinutes: number;
+    showTemplateUnderlay: boolean;
   };
   type PersistedWorkspace = {
     sourceLibrary: SourceItem[];
@@ -732,6 +736,7 @@ export default function Home() {
   const [userCredits, setUserCredits] = useState(20);
   const [isInfiniteCredits, setIsInfiniteCredits] = useState(false);
   const [creditError, setCreditError] = useState<string | null>(null);
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
   const isCreditsDepleted = !isInfiniteCredits && userCredits <= 0;
   const [marketplacePanel, setMarketplacePanel] = useState<MarketplacePanel>("store");
   const hasHydratedWorkspace = useRef(false);
@@ -938,6 +943,16 @@ export default function Home() {
           if (typeof workspace.drafts.answerKeyOutput === "string") setAnswerKeyOutput(workspace.drafts.answerKeyOutput);
           if (typeof workspace.drafts.gradingFeedbackDraft === "string") setGradingFeedbackDraft(workspace.drafts.gradingFeedbackDraft);
           if (typeof workspace.drafts.topicPredictorDraft === "string") setTopicPredictorDraft(workspace.drafts.topicPredictorDraft);
+          if (
+            workspace.drafts.mockPaperDifficulty === "balanced" ||
+            workspace.drafts.mockPaperDifficulty === "exam-hard" ||
+            workspace.drafts.mockPaperDifficulty === "mostly-medium"
+          ) {
+            setMockPaperDifficulty(workspace.drafts.mockPaperDifficulty);
+          }
+          if (typeof workspace.drafts.timedSectionName === "string") setTimedSectionName(workspace.drafts.timedSectionName);
+          if (typeof workspace.drafts.timedMinutes === "number") setTimedMinutes(Math.max(1, workspace.drafts.timedMinutes));
+          if (typeof workspace.drafts.showTemplateUnderlay === "boolean") setShowTemplateUnderlay(workspace.drafts.showTemplateUnderlay);
         }
       } finally {
         if (!cancelled) {
@@ -976,19 +991,46 @@ export default function Home() {
         answerKeyOutput,
         gradingFeedbackDraft,
         topicPredictorDraft,
+        mockPaperDifficulty,
+        timedSectionName,
+        timedMinutes,
+        showTemplateUnderlay,
       },
     };
 
-    const timer = window.setTimeout(() => {
-      void fetch("/api/workspace", {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-    }, 700);
+    const abortController = new AbortController();
+    let active = true;
+    setAutoSaveStatus("saving");
+
+    void fetch("/api/workspace", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+      signal: abortController.signal,
+    })
+      .then((response) => {
+        if (!active) {
+          return;
+        }
+
+        setAutoSaveStatus(response.ok ? "saved" : "error");
+      })
+      .catch((error) => {
+        if (!active) {
+          return;
+        }
+
+        if (error instanceof DOMException && error.name === "AbortError") {
+          return;
+        }
+
+        setAutoSaveStatus("error");
+        // Keep autosave silent; next user action retries automatically.
+    });
 
     return () => {
-      window.clearTimeout(timer);
+      active = false;
+      abortController.abort();
     };
   }, [
     isAuthenticated,
@@ -1006,6 +1048,10 @@ export default function Home() {
     answerKeyOutput,
     gradingFeedbackDraft,
     topicPredictorDraft,
+    mockPaperDifficulty,
+    timedSectionName,
+    timedMinutes,
+    showTemplateUnderlay,
   ]);
 
   const getGreeting = () => {
@@ -2806,6 +2852,24 @@ ${getSourceContext()}
                 <h1 className="text-lg font-semibold text-slate-800">Exam Workspace</h1>
               </div>
               <div className="flex items-center gap-2">
+                <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                  {autoSaveStatus === "saving" ? (
+                    <LoaderCircle size={12} className="animate-spin text-indigo-500" />
+                  ) : autoSaveStatus === "saved" ? (
+                    <CheckCircle2 size={12} className="text-emerald-500" />
+                  ) : autoSaveStatus === "error" ? (
+                    <X size={12} className="text-rose-500" />
+                  ) : (
+                    <CheckCircle2 size={12} className="text-slate-400" />
+                  )}
+                  {autoSaveStatus === "saving"
+                    ? "Saving"
+                    : autoSaveStatus === "saved"
+                      ? "Auto-saved"
+                      : autoSaveStatus === "error"
+                        ? "Save failed"
+                        : "Auto-save"}
+                </span>
                 {sourceLibrary.length > 0 ? (
                   <button
                     onClick={clearFile}
