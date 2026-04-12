@@ -130,26 +130,11 @@ textarea,
 }
 
 .mock-paper-preview-page {
-  width: 100%;
-  max-width: 794px;
-  min-height: 1123px;
-  aspect-ratio: 210 / 297;
+  box-sizing: border-box;
+  aspect-ratio: auto;
+  overflow: hidden;
   margin-bottom: 14px;
   page-break-after: always;
-}
-
-.mock-paper-preview-page--compact {
-  min-height: auto;
-  aspect-ratio: auto;
-  margin-bottom: 8px;
-  border-color: #cbd5e1;
-}
-
-.mock-paper-preview-page--compact::after {
-  content: "";
-  display: block;
-  margin-top: 10px;
-  border-bottom: 1px dashed #cbd5e1;
 }
 
 .mock-paper-preview {

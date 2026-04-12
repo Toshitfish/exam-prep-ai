@@ -74,6 +74,8 @@ type DraggableWindowProps = {
 
 const MIN_WINDOW_WIDTH = 520;
 const MIN_WINDOW_HEIGHT = 340;
+const MOCK_PAPER_A4_WIDTH_PX = 794;
+const MOCK_PAPER_A4_HEIGHT_PX = 1123;
 
 const getWindowViewportBounds = (win: FloatingWindowState) => {
   if (typeof window === "undefined") {
@@ -668,8 +670,6 @@ export default function Home() {
   const [mockPaperGenerationStage, setMockPaperGenerationStage] = useState<MockPaperGenerationStage>("idle");
   const [sourcePdfUrls, setSourcePdfUrls] = useState<Record<string, string>>({});
   const [showTemplateUnderlay, setShowTemplateUnderlay] = useState(true);
-  const [mockPaperPreviewZoom, setMockPaperPreviewZoom] = useState(100);
-  const [mockPaperCompactPages, setMockPaperCompactPages] = useState(true);
   const [gradingExportFormat, setGradingExportFormat] = useState<"doc" | "pdf">("doc");
   const [gradingFeedbackDraft, setGradingFeedbackDraft] = useState("");
   const [isEditingGradingFeedback, setIsEditingGradingFeedback] = useState(false);
@@ -1310,7 +1310,7 @@ export default function Home() {
     return `<!doctype html><html><head><meta charset="utf-8" /><base href="${window.location.origin}/" /><title>${fileNameBase}</title>${headStyles}<style>
       body { margin: 0; background: #eef2f7; }
       .export-wrap { max-width: 860px; margin: 18px auto; padding: 0 8px 18px; }
-      .mock-paper-preview-page { page-break-after: always; }
+      .mock-paper-preview-page { box-sizing: border-box; width: ${MOCK_PAPER_A4_WIDTH_PX}px; max-width: ${MOCK_PAPER_A4_WIDTH_PX}px; height: ${MOCK_PAPER_A4_HEIGHT_PX}px; min-height: ${MOCK_PAPER_A4_HEIGHT_PX}px; page-break-after: always; overflow: hidden; }
       .mock-paper-preview-page:last-child { page-break-after: auto; }
       @media print {
         body { background: #fff; }
@@ -3672,25 +3672,6 @@ ${getSourceContext()}
                   />
                   Template PDF Underlay
                 </label>
-                <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
-                  <input
-                    type="checkbox"
-                    checked={mockPaperCompactPages}
-                    onChange={(event) => setMockPaperCompactPages(event.target.checked)}
-                    className="h-3.5 w-3.5 rounded border-slate-300"
-                  />
-                  Compact Pages
-                </label>
-                <select
-                  value={mockPaperPreviewZoom}
-                  onChange={(event) => setMockPaperPreviewZoom(Number(event.target.value))}
-                  className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600"
-                  aria-label="Mock paper preview zoom"
-                >
-                  <option value={90}>Fit Width (90%)</option>
-                  <option value={100}>100%</option>
-                  <option value={110}>110%</option>
-                </select>
               </div>
             </div>
             {answerKeyOutput ? (
@@ -3720,8 +3701,13 @@ ${getSourceContext()}
                       {getMockPaperPages(answerKeyOutput).map((page, index) => (
                         <div
                           key={`mock-paper-page-${index}`}
-                          className={`mock-paper-preview-page ${mockPaperCompactPages ? "mock-paper-preview-page--compact" : ""} rounded-sm border border-slate-300 bg-white px-10 py-8 shadow-sm`}
-                          style={{ zoom: mockPaperPreviewZoom / 100 }}
+                          className="mock-paper-preview-page rounded-sm border border-slate-300 bg-white px-10 py-8 shadow-sm"
+                          style={{
+                            width: `${MOCK_PAPER_A4_WIDTH_PX}px`,
+                            maxWidth: `${MOCK_PAPER_A4_WIDTH_PX}px`,
+                            height: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
+                            minHeight: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
+                          }}
                         >
                           <div className="mock-paper-preview app-ui-content prose prose-sm max-w-none text-slate-800">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{page}</ReactMarkdown>
