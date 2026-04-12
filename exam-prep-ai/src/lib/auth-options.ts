@@ -1,12 +1,10 @@
 import type { NextAuthOptions } from "next-auth";
 import CredentialsProvider from "next-auth/providers/credentials";
 import GoogleProvider from "next-auth/providers/google";
-import { PrismaAdapter } from "@next-auth/prisma-adapter";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 
 export const authOptions: NextAuthOptions = {
-  adapter: PrismaAdapter(prisma),
   session: { strategy: "jwt" },
   pages: {
     signIn: "/",
@@ -32,7 +30,15 @@ export const authOptions: NextAuthOptions = {
           return null;
         }
 
-        const user = await prisma.user.findUnique({ where: { email } });
+        const user = await prisma.user.findUnique({
+          where: { email },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            passwordHash: true,
+          },
+        });
         if (!user) {
           return null;
         }
@@ -55,10 +61,49 @@ export const authOptions: NextAuthOptions = {
     }),
   ],
   callbacks: {
+    async signIn({ account, user }) {
+      if (account?.provider !== "google") {
+        return true;
+      }
+
+      const email = (user.email ?? "").trim().toLowerCase();
+      if (!email) {
+        return false;
+      }
+
+      const existing = await prisma.user.findUnique({
+        where: { email },
+        select: { id: true },
+      });
+
+      if (!existing) {
+        await prisma.user.create({
+          data: {
+            email,
+            name: user.name?.trim() || "Scholar",
+            image: user.image ?? null,
+          },
+        });
+      }
+
+      return true;
+    },
     async jwt({ token, user }) {
       if (user) {
         token.sub = user.id;
       }
+
+      if (!token.sub && token.email) {
+        const dbUser = await prisma.user.findUnique({
+          where: { email: token.email.toLowerCase() },
+          select: { id: true },
+        });
+
+        if (dbUser?.id) {
+          token.sub = dbUser.id;
+        }
+      }
+
       return token;
     },
     async session({ session, token }) {
