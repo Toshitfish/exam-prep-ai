@@ -1076,6 +1076,37 @@ export default function Home() {
     return text;
   };
 
+  const renderWorkspaceMarkdown = (text: string) => (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      components={{
+        code(props) {
+          const { className, children, ...rest } = props as {
+            className?: string;
+            children?: ReactNode;
+          };
+
+          const raw = String(children ?? "")
+            .replace(/\n$/, "")
+            .trim();
+          const isInline = !className || !className.includes("language-");
+
+          if (isInline && /^\[\d+\]$/.test(raw)) {
+            return <span className="source-citation-chip">{raw}</span>;
+          }
+
+          return (
+            <code className={className} {...rest}>
+              {children}
+            </code>
+          );
+        },
+      }}
+    >
+      {text}
+    </ReactMarkdown>
+  );
+
   const getSourceContext = () => {
     const selected = sourceLibrary.filter((item) => item.selected && item.text.trim());
     if (selected.length === 0) {
@@ -1948,10 +1979,10 @@ ${getSourceContext()}
         }
 
         const remaining = target.length - current.length;
-        const step = remaining > 220 ? 9 : remaining > 120 ? 6 : remaining > 40 ? 3 : 1;
+        const step = remaining > 260 ? 4 : remaining > 140 ? 3 : remaining > 60 ? 2 : 1;
         return target.slice(0, current.length + step);
       });
-    }, 16);
+    }, 24);
 
     return () => window.clearInterval(timer);
   }, [workspaceStatus, latestWorkspaceAssistantId, latestWorkspaceAssistantText]);
@@ -2347,10 +2378,13 @@ ${getSourceContext()}
                               }`}
                             >
                               {isStreamingAssistantMessage ? (
-                                <pre className="app-ui-content chat-typing-cursor whitespace-pre-wrap break-words text-[15px] leading-7 text-slate-700">{messageText}</pre>
+                                <div className="memo-response app-ui-content prose prose-sm md:prose-base max-w-none prose-slate prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-li:my-1 leading-7">
+                                  {renderWorkspaceMarkdown(messageText)}
+                                  <span className="chat-typing-cursor-inline" aria-hidden="true" />
+                                </div>
                               ) : (
                                 <div className="memo-response app-ui-content prose prose-sm md:prose-base max-w-none prose-slate prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-li:my-1 prose-code:bg-orange-50 prose-code:text-orange-500 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:font-medium prose-code:before:content-none prose-code:after:content-none leading-7">
-                                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{messageText}</ReactMarkdown>
+                                  {renderWorkspaceMarkdown(messageText)}
                                 </div>
                               )}
                             </div>
@@ -2359,10 +2393,14 @@ ${getSourceContext()}
                       })
                     )}
                     {workspaceStatus === "submitted" ? (
-                      <p className="chat-status-line text-sm font-medium text-indigo-500">Analysing source...</p>
+                      <div className="flex justify-start">
+                        <div className="assistant-thinking-bubble chat-status-line rounded-2xl bg-slate-100 px-4 py-2 text-sm font-medium text-slate-600">
+                          Analysing sources
+                        </div>
+                      </div>
                     ) : null}
                     {workspaceStatus === "streaming" ? (
-                      <p className="chat-status-line text-sm font-medium text-indigo-500">Typing detailed response...</p>
+                      <p className="chat-status-line text-sm font-medium text-orange-500">Drafting detailed response</p>
                     ) : null}
                   </div>
                   <div

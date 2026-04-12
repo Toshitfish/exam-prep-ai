@@ -41,6 +41,10 @@ textarea,
   animation: chat-ellipsis 1.2s steps(4, end) infinite;
 }
 
+.assistant-thinking-bubble {
+  border: 1px solid #e2e8f0;
+}
+
 .chat-typing-cursor::after {
   content: "";
   display: inline-block;
@@ -49,6 +53,46 @@ textarea,
   border-right: 2px solid rgb(99 102 241);
   animation: chat-caret 0.9s step-end infinite;
   vertical-align: baseline;
+}
+
+.chat-typing-cursor-inline {
+  display: inline-block;
+  width: 0.55ch;
+  margin-left: 2px;
+  border-right: 2px solid rgb(249 115 22);
+  animation: chat-caret 0.9s step-end infinite;
+  vertical-align: baseline;
+}
+
+.source-citation-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.01rem 0.4rem;
+  margin-left: 0.22rem;
+  border: 1px solid #f6ddc1;
+  border-radius: 999px;
+  background: #fff8f1;
+  color: #d97745;
+  font-size: 0.76em;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.015em;
+}
+
+.memo-response p {
+  margin-top: 0.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.memo-response ul {
+  margin-top: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+
+.memo-response li {
+  margin-top: 0.2rem;
+  margin-bottom: 0.2rem;
 }
 
 @keyframes chat-ellipsis {
