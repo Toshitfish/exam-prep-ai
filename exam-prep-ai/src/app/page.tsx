@@ -16,8 +16,8 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
-  Chrome,
   FolderOpen,
+  Globe,
   Home as HomeIcon,
   KeyRound,
   ListFilter,
@@ -2295,7 +2295,7 @@ ${getSourceContext()}
               onClick={handleGoogleSignIn}
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
             >
-              <Chrome size={16} /> {authMode === "signin" ? "Continue with Google" : "Sign up with Google"}
+              <Globe size={16} /> {authMode === "signin" ? "Continue with Google" : "Sign up with Google"}
             </button>
           </form>
 
