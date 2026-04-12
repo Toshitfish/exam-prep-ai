@@ -1175,26 +1175,20 @@ export default function Home() {
       return "question-paper";
     };
 
-    const file = acceptedFiles[0];
-    if (!file) {
+    if (acceptedFiles.length === 0) {
       return;
     }
 
-    const allowed = await checkCreditsEnough(TOOL_CREDIT_COSTS.parsePdf, "Upload + Parse PDF");
+    const requiredCredits = TOOL_CREDIT_COSTS.parsePdf * acceptedFiles.length;
+    const allowed = await checkCreditsEnough(requiredCredits, "Upload + Parse PDF");
     if (!allowed) {
       return;
     }
 
-    setSourceText("");
-    setParseDiagnostics(null);
-    setIsParsing(true);
-    setParseProgress(0);
-    setParseStage("uploading");
+    const requestParse = async (file: File) => {
+      const payload = new FormData();
+      payload.append("file", file);
 
-    const payload = new FormData();
-    payload.append("file", file);
-
-    const requestParse = async () => {
       return new Promise<{
         status: number;
         result: {
@@ -1247,57 +1241,63 @@ export default function Home() {
       });
     };
 
-    let didFail = false;
+    setIsParsing(true);
+    setParseProgress(0);
+    setParseStage("uploading");
 
-    try {
-      const { status, result } = await requestParse();
+    let hadFailure = false;
 
-      if (status < 200 || status >= 300) {
-        throw new Error(result.error || "Failed to parse PDF.");
-      }
+    for (const file of acceptedFiles) {
+      try {
+        const { status, result } = await requestParse(file);
 
-      setParseProgress(100);
-
-      const extracted = result.markdown?.trim() || "";
-      const parsedText = extracted || (result.warning ? `> OCR note\n\n${result.warning}` : "No text extracted from this PDF.");
-      setParseDiagnostics(result.diagnostics ?? null);
-
-      const newSource: SourceItem = {
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        name: file.name,
-        role: inferSourceRole(file.name),
-        text: parsedText,
-        selected: true,
-      };
-
-      const pdfUrl = URL.createObjectURL(file);
-
-      setSourceLibrary((previous) => [...previous, newSource]);
-      setSourcePdfUrls((previous) => ({ ...previous, [newSource.id]: pdfUrl }));
-      setSourceText(parsedText);
-      await deductCredits(TOOL_CREDIT_COSTS.parsePdf, "Upload + Parse PDF");
-    } catch (error) {
-      didFail = true;
-      const message = error instanceof Error ? error.message : "Unknown parsing error.";
-      setSourceText(`> Parsing failed\n\n${message}`);
-      setParseDiagnostics(null);
-      setParseStage("failed");
-      setParseProgress(0);
-    } finally {
-      setIsParsing(false);
-      window.setTimeout(() => {
-        if (!didFail) {
-          setParseProgress(0);
+        if (status < 200 || status >= 300) {
+          throw new Error(result.error || `Failed to parse ${file.name}.`);
         }
-        setParseStage("idle");
-      }, didFail ? 1600 : 900);
+
+        setParseProgress(100);
+
+        const extracted = result.markdown?.trim() || "";
+        const parsedText = extracted || (result.warning ? `> OCR note\n\n${result.warning}` : "No text extracted from this PDF.");
+        setParseDiagnostics(result.diagnostics ?? null);
+
+        const newSource: SourceItem = {
+          id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+          name: file.name,
+          role: inferSourceRole(file.name),
+          text: parsedText,
+          selected: true,
+        };
+
+        const pdfUrl = URL.createObjectURL(file);
+
+        setSourceLibrary((previous) => [...previous, newSource]);
+        setSourcePdfUrls((previous) => ({ ...previous, [newSource.id]: pdfUrl }));
+        setSourceText(parsedText);
+        await deductCredits(TOOL_CREDIT_COSTS.parsePdf, "Upload + Parse PDF");
+      } catch (error) {
+        hadFailure = true;
+        const message = error instanceof Error ? error.message : "Unknown parsing error.";
+        setSourceText(`> Parsing failed\n\n${message}`);
+        setParseDiagnostics(null);
+        setParseStage("failed");
+        setParseProgress(0);
+      }
     }
+
+    setIsParsing(false);
+    window.setTimeout(() => {
+      if (!hadFailure) {
+        setParseProgress(0);
+      }
+      setParseStage("idle");
+    }, hadFailure ? 1600 : 900);
   };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { "application/pdf": [".pdf"] },
-    maxFiles: 1,
+    maxFiles: 20,
     disabled: isCreditsDepleted,
   });
 
@@ -2877,8 +2877,8 @@ ${getSourceContext()}
                       <UploadCloud size={20} />
                     </div>
                     <div>
-                      <p className="text-sm font-medium text-slate-700">{sourceLibrary.length > 0 ? "Add another source PDF" : "Drop exam paper PDF here"}</p>
-                      <p className="text-xs text-slate-500">Drag and drop, or click to browse</p>
+                      <p className="text-sm font-medium text-slate-700">{sourceLibrary.length > 0 ? "Add one or more source PDFs" : "Drop one or more exam PDFs here"}</p>
+                      <p className="text-xs text-slate-500">Drag and drop multiple files, or click to browse</p>
                     </div>
                   </div>
 
