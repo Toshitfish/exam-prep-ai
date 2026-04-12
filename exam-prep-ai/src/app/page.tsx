@@ -741,6 +741,7 @@ export default function Home() {
   const [isInfiniteCredits, setIsInfiniteCredits] = useState(false);
   const [creditError, setCreditError] = useState<string | null>(null);
   const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved-local" | "saved-cloud" | "error">("idle");
+  const [lastSavedAtLabel, setLastSavedAtLabel] = useState<string | null>(null);
   const isCreditsDepleted = !isInfiniteCredits && userCredits <= 0;
   const [marketplacePanel, setMarketplacePanel] = useState<MarketplacePanel>("store");
   const hasHydratedWorkspace = useRef(false);
@@ -766,6 +767,17 @@ export default function Home() {
       "- Tone Preference: supportive examiner-coach, concise first, expand on request",
       "- Formatting Preference: short bullets for complex outputs; plain short answer for simple queries",
     ].join("\n");
+  };
+
+  const markWorkspaceSaved = (destination: "local" | "cloud") => {
+    setAutoSaveStatus(destination === "cloud" ? "saved-cloud" : "saved-local");
+    setLastSavedAtLabel(
+      new Date().toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+      }),
+    );
   };
 
   useEffect(() => {
@@ -1026,7 +1038,7 @@ export default function Home() {
     try {
       window.localStorage.setItem(localKey, JSON.stringify(payload));
       didSaveLocal = true;
-      setAutoSaveStatus("saved-local");
+      markWorkspaceSaved("local");
     } catch {
       // Ignore localStorage quota/private mode issues and continue with server save attempt.
     }
@@ -1045,14 +1057,29 @@ export default function Home() {
           return;
         }
 
-        setAutoSaveStatus(response.ok ? "saved-cloud" : didSaveLocal ? "saved-local" : "error");
+        if (response.ok) {
+          markWorkspaceSaved("cloud");
+          return;
+        }
+
+        if (didSaveLocal) {
+          markWorkspaceSaved("local");
+          return;
+        }
+
+        setAutoSaveStatus("error");
       })
       .catch(() => {
         if (requestId !== latestWorkspaceSaveRequestId.current) {
           return;
         }
 
-        setAutoSaveStatus(didSaveLocal ? "saved-local" : "error");
+        if (didSaveLocal) {
+          markWorkspaceSaved("local");
+          return;
+        }
+
+        setAutoSaveStatus("error");
         // Keep autosave silent; next user action retries automatically.
     });
   }, [
@@ -2567,7 +2594,7 @@ ${getSourceContext()}
     try {
       window.localStorage.setItem(localKey, JSON.stringify(payload));
       didSaveLocal = true;
-      setAutoSaveStatus("saved-local");
+      markWorkspaceSaved("local");
     } catch {
       // Ignore local storage failures and continue with server save.
     }
@@ -2587,13 +2614,28 @@ ${getSourceContext()}
         return;
       }
 
-      setAutoSaveStatus(response.ok ? "saved-cloud" : didSaveLocal ? "saved-local" : "error");
+      if (response.ok) {
+        markWorkspaceSaved("cloud");
+        return;
+      }
+
+      if (didSaveLocal) {
+        markWorkspaceSaved("local");
+        return;
+      }
+
+      setAutoSaveStatus("error");
     } catch {
       if (requestId !== latestWorkspaceSaveRequestId.current) {
         return;
       }
 
-      setAutoSaveStatus(didSaveLocal ? "saved-local" : "error");
+      if (didSaveLocal) {
+        markWorkspaceSaved("local");
+        return;
+      }
+
+      setAutoSaveStatus("error");
     }
   };
 
@@ -3046,9 +3088,9 @@ ${getSourceContext()}
                   {autoSaveStatus === "saving"
                     ? "Saving"
                     : autoSaveStatus === "saved-cloud"
-                      ? "Saved to cloud"
+                      ? `Saved to cloud${lastSavedAtLabel ? ` ${lastSavedAtLabel}` : ""}`
                       : autoSaveStatus === "saved-local"
-                        ? "Saved locally"
+                        ? `Saved locally${lastSavedAtLabel ? ` ${lastSavedAtLabel}` : ""}`
                       : autoSaveStatus === "error"
                         ? "Save failed"
                         : "Auto-save"}
