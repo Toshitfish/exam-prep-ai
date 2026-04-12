@@ -2346,6 +2346,11 @@ ${getSourceContext()}
   }, [showStartupSplash]);
 
   const clearFile = () => {
+    const confirmed = window.confirm("Clear all uploaded source PDFs and parsed content? This cannot be undone.");
+    if (!confirmed) {
+      return;
+    }
+
     Object.values(sourcePdfUrls).forEach((url) => {
       URL.revokeObjectURL(url);
     });
@@ -2355,6 +2360,24 @@ ${getSourceContext()}
     setActiveSourceId(null);
     setParseDiagnostics(null);
     setIsParsing(false);
+  };
+
+  const clearMockPaperOutput = () => {
+    const confirmed = window.confirm("Clear generated mock paper output? This cannot be undone.");
+    if (!confirmed) {
+      return;
+    }
+
+    setAnswerKeyOutput("");
+  };
+
+  const clearGradingAnswer = () => {
+    const confirmed = window.confirm("Clear your pasted answer text? This cannot be undone.");
+    if (!confirmed) {
+      return;
+    }
+
+    setGradingAnswer("");
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -4130,7 +4153,7 @@ ${getSourceContext()}
           </button>
           <button
             type="button"
-            onClick={() => setAnswerKeyOutput("")}
+            onClick={clearMockPaperOutput}
             className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
           >
             Clear Output
@@ -4362,7 +4385,7 @@ ${getSourceContext()}
               </button>
               <button
                 type="button"
-                onClick={() => setGradingAnswer("")}
+                onClick={clearGradingAnswer}
                 className="rounded-lg border border-slate-200 px-4 py-2 text-sm text-slate-600 transition hover:bg-slate-50"
               >
                 Clear
