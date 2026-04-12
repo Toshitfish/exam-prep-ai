@@ -75,8 +75,9 @@ type DraggableWindowProps = {
 
 const MIN_WINDOW_WIDTH = 520;
 const MIN_WINDOW_HEIGHT = 340;
+const A4_RATIO_PORTRAIT = Math.SQRT2;
 const MOCK_PAPER_A4_WIDTH_PX = 794;
-const MOCK_PAPER_A4_HEIGHT_PX = 1123;
+const MOCK_PAPER_A4_HEIGHT_PX = Math.round(MOCK_PAPER_A4_WIDTH_PX * A4_RATIO_PORTRAIT);
 const TOOL_CREDIT_COSTS = {
   timedSection: 0,
   parsePdf: 1,
@@ -273,7 +274,7 @@ const DraggableWindow = ({
   return (
     <motion.div
       ref={windowRef}
-      animate={win.isMaximized ? { left: 84, top: 20, width: "calc(100vw - 110px)", height: "calc(100vh - 56px)" } : undefined}
+      animate={win.isMaximized ? { left: 0, top: 0, width: "100vw", height: "100vh" } : undefined}
       transition={
         win.isMaximized
           ? { type: "spring", stiffness: 320, damping: 28 }
@@ -283,7 +284,9 @@ const DraggableWindow = ({
         zIndex: win.zIndex,
         ...(win.isMaximized ? {} : { left: win.x, top: win.y, width: win.width, height: win.height }),
       }}
-      className="fixed overflow-hidden rounded-xl border border-slate-200 bg-white/95 shadow-xl transform-gpu will-change-transform"
+      className={`fixed overflow-hidden border border-slate-200 bg-white/95 shadow-xl transform-gpu will-change-transform ${
+        win.isMaximized ? "rounded-none" : "rounded-xl"
+      }`}
     >
       <div
         onPointerDownCapture={startDragFromTitlebar}
@@ -698,6 +701,7 @@ export default function Home() {
   const [mockPaperChatError, setMockPaperChatError] = useState<string | null>(null);
   const [mockPaperEditQueue, setMockPaperEditQueue] = useState<string[]>([]);
   const [mockPaperGenerationStage, setMockPaperGenerationStage] = useState<MockPaperGenerationStage>("idle");
+  const [mockPaperPreviewZoom, setMockPaperPreviewZoom] = useState(80);
   const [sourcePdfUrls, setSourcePdfUrls] = useState<Record<string, string>>({});
   const [showTemplateUnderlay, setShowTemplateUnderlay] = useState(true);
   const [gradingExportFormat, setGradingExportFormat] = useState<"doc" | "pdf">("doc");
@@ -726,8 +730,9 @@ export default function Home() {
   const [authPasswordInput, setAuthPasswordInput] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
   const [userCredits, setUserCredits] = useState(20);
+  const [isInfiniteCredits, setIsInfiniteCredits] = useState(false);
   const [creditError, setCreditError] = useState<string | null>(null);
-  const isCreditsDepleted = userCredits <= 0;
+  const isCreditsDepleted = !isInfiniteCredits && userCredits <= 0;
   const [marketplacePanel, setMarketplacePanel] = useState<MarketplacePanel>("store");
   const hasHydratedWorkspace = useRef(false);
   const [workspaceReadyToSave, setWorkspaceReadyToSave] = useState(false);
@@ -774,7 +779,10 @@ export default function Home() {
         return;
       }
 
-      const result = (await response.json()) as { credits?: number };
+      const result = (await response.json()) as { credits?: number; infinite?: boolean };
+      if (!cancelled) {
+        setIsInfiniteCredits(Boolean(result.infinite));
+      }
       if (!cancelled && typeof result.credits === "number") {
         setUserCredits(Math.max(0, Math.floor(result.credits)));
       }
@@ -1034,6 +1042,11 @@ export default function Home() {
       return true;
     }
 
+    if (isInfiniteCredits) {
+      setCreditError(null);
+      return true;
+    }
+
     if (userCredits < amount) {
       setCreditError(`Not enough credits for ${feature}.`);
       return false;
@@ -1051,7 +1064,10 @@ export default function Home() {
         return true;
       }
 
-      const result = (await response.json().catch(() => ({}))) as { error?: string; credits?: number };
+      const result = (await response.json().catch(() => ({}))) as { error?: string; credits?: number; infinite?: boolean };
+      if (typeof result.infinite === "boolean") {
+        setIsInfiniteCredits(result.infinite);
+      }
       if (typeof result.credits === "number") {
         const latestCredits = Math.max(0, Math.floor(result.credits));
         setUserCredits(latestCredits);
@@ -1080,6 +1096,11 @@ export default function Home() {
       return true;
     }
 
+    if (isInfiniteCredits) {
+      setCreditError(null);
+      return true;
+    }
+
     if (userCredits < amount) {
       setCreditError(`Not enough credits for ${feature}.`);
       return false;
@@ -1096,7 +1117,10 @@ export default function Home() {
         body: JSON.stringify({ amount, feature, mode: "consume" }),
       });
 
-      const result = (await response.json().catch(() => ({}))) as { error?: string; credits?: number };
+      const result = (await response.json().catch(() => ({}))) as { error?: string; credits?: number; infinite?: boolean };
+      if (typeof result.infinite === "boolean") {
+        setIsInfiniteCredits(result.infinite);
+      }
 
       if (!response.ok) {
         if (typeof result.credits === "number") {
@@ -1482,9 +1506,10 @@ export default function Home() {
       .join("\n");
 
     return `<!doctype html><html><head><meta charset="utf-8" /><base href="${window.location.origin}/" /><title>${fileNameBase}</title>${headStyles}<style>
+      @page { size: A4 portrait; margin: 10mm; }
       body { margin: 0; background: #eef2f7; }
       .export-wrap { max-width: 860px; margin: 18px auto; padding: 0 8px 18px; }
-      .mock-paper-preview-page { box-sizing: border-box; width: ${MOCK_PAPER_A4_WIDTH_PX}px; max-width: ${MOCK_PAPER_A4_WIDTH_PX}px; height: ${MOCK_PAPER_A4_HEIGHT_PX}px; min-height: ${MOCK_PAPER_A4_HEIGHT_PX}px; page-break-after: always; overflow: hidden; }
+      .mock-paper-preview-page { box-sizing: border-box; width: ${MOCK_PAPER_A4_WIDTH_PX}px; max-width: ${MOCK_PAPER_A4_WIDTH_PX}px; height: ${MOCK_PAPER_A4_HEIGHT_PX}px; min-height: ${MOCK_PAPER_A4_HEIGHT_PX}px; aspect-ratio: 210 / 297; page-break-after: always; overflow: hidden; }
       .mock-paper-preview-page:last-child { page-break-after: auto; }
       @media print {
         body { background: #fff; }
@@ -2510,8 +2535,11 @@ ${getSourceContext()}
   const scoreSourceText = (gradingFeedbackDraft || latestAssistantFeedback).trim();
   const scoreMatch = scoreSourceText.match(/(\d+)\s*\/\s*(\d+)/);
   const FREE_TRIAL_CREDIT_LIMIT = 20;
-  const cappedCredits = Math.max(0, Math.min(userCredits, FREE_TRIAL_CREDIT_LIMIT));
+  const cappedCredits = isInfiniteCredits
+    ? FREE_TRIAL_CREDIT_LIMIT
+    : Math.max(0, Math.min(userCredits, FREE_TRIAL_CREDIT_LIMIT));
   const creditBarPercent = (cappedCredits / FREE_TRIAL_CREDIT_LIMIT) * 100;
+  const previewScale = Math.max(0.5, Math.min(1.25, mockPaperPreviewZoom / 100));
 
   const teleportToMarketplace = () => {
     setShowCoverPage(false);
@@ -3320,7 +3348,9 @@ ${getSourceContext()}
           <div>
             <h1 className="mb-1 text-xl font-semibold text-slate-800">Marketplace</h1>
             <p className="text-sm text-slate-500">Top up credits and understand exactly how each feature spends them.</p>
-            <p className="mt-1 text-xs font-semibold text-emerald-700">Current balance: {userCredits} credits</p>
+            <p className="mt-1 text-xs font-semibold text-emerald-700">
+              Current balance: {isInfiniteCredits ? "Infinite" : `${userCredits} credits`}
+            </p>
           </div>
           <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
             <button
@@ -3704,7 +3734,7 @@ ${getSourceContext()}
                   />
                 </div>
                 <p className="text-sm font-medium text-emerald-800">
-                  {cappedCredits} / {FREE_TRIAL_CREDIT_LIMIT} credits
+                  {isInfiniteCredits ? "Infinite credits" : `${cappedCredits} / ${FREE_TRIAL_CREDIT_LIMIT} credits`}
                 </p>
               </div>
 
@@ -4159,6 +4189,35 @@ ${getSourceContext()}
                 />
               ) : (
                 <div ref={mockPaperPreviewRef} className="rounded-xl border border-slate-200 bg-slate-100 p-3">
+                  <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2">
+                    <p className="text-xs font-semibold text-slate-600">
+                      Preview pages: {getMockPaperPages(answerKeyOutput).length}
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setMockPaperPreviewZoom((prev) => Math.max(50, prev - 10))}
+                        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        -
+                      </button>
+                      <span className="min-w-[52px] text-center text-xs font-semibold text-slate-700">{mockPaperPreviewZoom}%</span>
+                      <button
+                        type="button"
+                        onClick={() => setMockPaperPreviewZoom((prev) => Math.min(125, prev + 10))}
+                        className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                      >
+                        +
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setMockPaperPreviewZoom(80)}
+                        className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
                   <div className={`${showTemplateUnderlay && templatePreviewPdfUrl ? "grid gap-4 xl:grid-cols-2" : "block"}`}>
                     {showTemplateUnderlay && templatePreviewPdfUrl ? (
                       <div className="rounded-lg border border-slate-300 bg-white p-2 shadow-sm">
@@ -4176,19 +4235,37 @@ ${getSourceContext()}
                     <div className="mx-auto w-full max-w-[820px] space-y-4">
                       {getMockPaperPages(answerKeyOutput).map((page, index) => (
                         <div
-                          key={`mock-paper-page-${index}`}
-                          className="mock-paper-preview-page rounded-sm border border-slate-300 bg-white px-10 py-8 shadow-sm"
+                          key={`mock-paper-page-wrap-${index}`}
+                          className="mx-auto"
                           style={{
-                            width: `${MOCK_PAPER_A4_WIDTH_PX}px`,
-                            maxWidth: `${MOCK_PAPER_A4_WIDTH_PX}px`,
-                            height: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
-                            minHeight: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
+                            width: `${MOCK_PAPER_A4_WIDTH_PX * previewScale}px`,
+                            height: `${MOCK_PAPER_A4_HEIGHT_PX * previewScale}px`,
                           }}
                         >
-                          <div className="mock-paper-preview app-ui-content prose prose-sm max-w-none text-slate-800">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{page}</ReactMarkdown>
+                          <div
+                            style={{
+                              transform: `scale(${previewScale})`,
+                              transformOrigin: "top left",
+                              width: `${MOCK_PAPER_A4_WIDTH_PX}px`,
+                              height: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
+                            }}
+                          >
+                            <div
+                              className="mock-paper-preview-page rounded-sm border border-slate-300 bg-white px-10 py-8 shadow-sm"
+                              style={{
+                                width: `${MOCK_PAPER_A4_WIDTH_PX}px`,
+                                maxWidth: `${MOCK_PAPER_A4_WIDTH_PX}px`,
+                                height: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
+                                minHeight: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
+                                aspectRatio: "210 / 297",
+                              }}
+                            >
+                              <div className="mock-paper-preview app-ui-content prose prose-sm max-w-none text-slate-800">
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{page}</ReactMarkdown>
+                              </div>
+                              <div className="mt-8 border-t border-slate-200 pt-2 text-right text-[11px] text-slate-500">Page {index + 1}</div>
+                            </div>
                           </div>
-                          <div className="mt-8 border-t border-slate-200 pt-2 text-right text-[11px] text-slate-500">Page {index + 1}</div>
                         </div>
                       ))}
                       <p className="text-[11px] text-slate-500">Template fidelity mode: mirrors uploaded past-paper structure, symbols, and page breaks when available.</p>
