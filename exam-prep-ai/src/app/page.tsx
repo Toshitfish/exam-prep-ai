@@ -1076,6 +1076,14 @@ export default function Home() {
     return text;
   };
 
+  const normalizeSourceReferenceTags = (text: string) => {
+    // Convert plain square-bracket source references into inline code so markdown rendering
+    // can style them as citation badges (for example: [Section B Q3], [Q1], [Source 2]).
+    return text.replace(/\[(Section[^\]]+|Q\s*\d+[^\]]*|Question\s*\d+[^\]]*|Source\s*\d+[^\]]*|\d+)\]/gi, (match) => {
+      return `\`${match}\``;
+    });
+  };
+
   const renderWorkspaceMarkdown = (text: string) => (
     <ReactMarkdown
       remarkPlugins={[remarkGfm]}
@@ -1091,7 +1099,7 @@ export default function Home() {
             .trim();
           const isInline = !className || !className.includes("language-");
 
-          if (isInline && /^\[\d+\]$/.test(raw)) {
+          if (isInline && /^\[[^\]]+\]$/.test(raw) && raw.length <= 48) {
             return <span className="source-citation-chip">{raw}</span>;
           }
 
@@ -1103,7 +1111,7 @@ export default function Home() {
         },
       }}
     >
-      {text}
+      {normalizeSourceReferenceTags(text)}
     </ReactMarkdown>
   );
 
@@ -1809,8 +1817,9 @@ Use only the uploaded source context below to answer.
   3) Key Details
   4) In Short
 - Write each section label as a standalone bold line (example: **Direct Answer**).
-- In Source Evidence, use bullet points and include citation tags as inline code like \`[1]\`, \`[2]\`, \`[3]\`.
-- Each citation must map to a specific source section/question label from uploaded content.
+- In Source Evidence, use source tags in square brackets with labels (for example: [Section B Q3], [Section E Q1]).
+- Place source tags at the end of the supporting sentence so they do not interrupt reading flow.
+- Each source tag must map to a specific source section/question label from uploaded content.
 - In Key Details, prefer bullet labels such as Immediate Cause, Core Objective, Impact, Significance.
 - Keep wording exam-ready, clear, and specific.
 
