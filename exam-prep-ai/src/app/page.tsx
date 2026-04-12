@@ -610,6 +610,7 @@ export default function Home() {
   const [isEngineCollapsed, setIsEngineCollapsed] = useState(false);
   const [workspaceCompactPane, setWorkspaceCompactPane] = useState<"source" | "chat" | "engine">("source");
   const [isCompactWorkspace, setIsCompactWorkspace] = useState(false);
+  const [isDualPaneCompact, setIsDualPaneCompact] = useState(false);
   const [showStartupSplash, setShowStartupSplash] = useState(true);
   const [splashStage, setSplashStage] = useState<"idle" | "expand" | "exit">("idle");
   const [showCoverPage, setShowCoverPage] = useState(true);
@@ -720,7 +721,9 @@ export default function Home() {
     }
 
     const updateCompactWorkspace = () => {
-      setIsCompactWorkspace(window.innerWidth < 1280);
+      const width = window.innerWidth;
+      setIsCompactWorkspace(width < 1280);
+      setIsDualPaneCompact(width >= 900 && width < 1280);
     };
 
     updateCompactWorkspace();
@@ -1947,420 +1950,460 @@ ${getSourceContext()}
     });
   };
 
-  const renderWorkspaceView = () => (
-    <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-visible p-3 md:p-4 lg:flex-row lg:overflow-hidden">
-      {isCompactWorkspace ? (
-        <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
-          <button
-            type="button"
-            onClick={() => setWorkspaceCompactPane("source")}
-            className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
-              workspaceCompactPane === "source" ? "bg-indigo-50 text-indigo-600" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            Source
-          </button>
-          <button
-            type="button"
-            onClick={() => setWorkspaceCompactPane("chat")}
-            className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
-              workspaceCompactPane === "chat" ? "bg-indigo-50 text-indigo-600" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            Chat
-          </button>
-          <button
-            type="button"
-            onClick={() => setWorkspaceCompactPane("engine")}
-            className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
-              workspaceCompactPane === "engine" ? "bg-indigo-50 text-indigo-600" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
-            }`}
-          >
-            Engine
-          </button>
-        </div>
-      ) : null}
+  const renderWorkspaceView = () => {
+    const showMainShell = !isCompactWorkspace || isDualPaneCompact || workspaceCompactPane !== "engine";
+    const showSourcePane = !isCompactWorkspace || isDualPaneCompact || workspaceCompactPane === "source";
+    const showChatPane = !isCompactWorkspace || isDualPaneCompact || workspaceCompactPane === "chat";
+    const showEnginePane = !isCompactWorkspace || workspaceCompactPane === "engine";
+    const sourceCollapsedDesktop = !isCompactWorkspace && isSourceCollapsed;
+    const chatCollapsedDesktop = !isCompactWorkspace && isChatCollapsed;
 
-      {(!isCompactWorkspace || workspaceCompactPane !== "engine") ? (
-      <section className="relative m-0 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3 md:px-6 md:py-4">
-          <div className="flex items-center gap-3">
-            <BookOpen size={18} className="text-slate-400" />
-            <h1 className="text-lg font-semibold text-slate-800">Exam Workspace</h1>
-          </div>
-          <div className="flex items-center gap-2">
-            {sourceLibrary.length > 0 ? (
-              <button
-                onClick={clearFile}
-                className="flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 transition-colors hover:text-red-500"
-                type="button"
-              >
-                <X size={14} /> Clear
-              </button>
-            ) : (
-              <span className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500">Ready</span>
-            )}
-          </div>
-        </header>
-
-        {isParsing ? (
-          <div className="border-b border-indigo-100 bg-indigo-50/70 px-4 py-2 md:px-6">
-            <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-indigo-700">
-              <span>{parseStage === "uploading" ? "Uploading PDF" : "Processing uploaded file"}</span>
-              {parseStage === "uploading" ? <span>{Math.max(0, Math.min(100, parseProgress))}%</span> : null}
-            </div>
-            {parseStage === "uploading" ? (
-              <div className="h-1.5 overflow-hidden rounded-full bg-indigo-100">
-                <div
-                  className="h-full rounded-full bg-indigo-500 transition-all duration-300"
-                  style={{ width: `${Math.max(0, Math.min(100, parseProgress))}%` }}
-                />
-              </div>
-            ) : (
-              <p className="text-[11px] font-medium text-indigo-700/90">Upload complete. Waiting for parser response...</p>
-            )}
+    return (
+      <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-visible p-3 md:p-4 lg:flex-row lg:overflow-hidden">
+        {isCompactWorkspace ? (
+          <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50 p-2 shadow-sm">
+            <button
+              type="button"
+              onClick={() => setWorkspaceCompactPane("source")}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                workspaceCompactPane === "source"
+                  ? "bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100"
+                  : "bg-slate-100/80 text-slate-600 hover:bg-slate-200/80"
+              }`}
+            >
+              <BookOpen size={14} />
+              Source
+            </button>
+            <button
+              type="button"
+              onClick={() => setWorkspaceCompactPane("chat")}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                workspaceCompactPane === "chat"
+                  ? "bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100"
+                  : "bg-slate-100/80 text-slate-600 hover:bg-slate-200/80"
+              }`}
+            >
+              <PencilLine size={14} />
+              Chat
+            </button>
+            <button
+              type="button"
+              onClick={() => setWorkspaceCompactPane("engine")}
+              className={`inline-flex items-center justify-center gap-1.5 rounded-xl px-3 py-2 text-xs font-semibold transition ${
+                workspaceCompactPane === "engine"
+                  ? "bg-indigo-50 text-indigo-600 ring-1 ring-indigo-100"
+                  : "bg-slate-100/80 text-slate-600 hover:bg-slate-200/80"
+              }`}
+            >
+              <ChartSpline size={14} />
+              Engine
+            </button>
           </div>
         ) : null}
 
-        <div
-          className={`grid min-h-0 flex-1 grid-cols-1 gap-0 ${
-            isCompactWorkspace
-              ? ""
-              : isSourceCollapsed && isChatCollapsed
-                ? "xl:grid-cols-[52px_52px]"
-                : isSourceCollapsed
-                  ? "xl:grid-cols-[52px_minmax(0,1fr)]"
-                  : isChatCollapsed
-                    ? "xl:grid-cols-[minmax(0,1fr)_52px]"
-                    : "xl:grid-cols-2"
-          }`}
-        >
-          {(!isCompactWorkspace || workspaceCompactPane === "source") && isSourceCollapsed ? (
-            <div className="hidden border-r border-slate-100 bg-slate-50/40 xl:flex xl:flex-col xl:items-center xl:py-5">
-              <button
-                type="button"
-                onClick={() => setIsSourceCollapsed(false)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
-                aria-label="Expand source panel"
-              >
-                <ChevronRight size={16} />
-              </button>
-            </div>
-          ) : (!isCompactWorkspace || workspaceCompactPane === "source") ? (
-            <div className="min-h-0 overflow-y-auto border-r border-slate-100 px-4 py-4 md:px-6 md:py-5">
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-600">
-                  <BookOpen size={16} /> Source Panel
-                </h2>
-                {!isCompactWorkspace ? (
+        {showMainShell ? (
+          <section
+            className={`relative m-0 flex min-w-0 flex-1 flex-col rounded-2xl border border-slate-100 bg-white shadow-sm ${
+              isCompactWorkspace ? "min-h-[calc(100dvh-230px)] overflow-hidden" : "overflow-hidden"
+            }`}
+          >
+            <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3 md:px-6 md:py-4">
+              <div className="flex items-center gap-3">
+                <BookOpen size={18} className="text-slate-400" />
+                <h1 className="text-lg font-semibold text-slate-800">Exam Workspace</h1>
+              </div>
+              <div className="flex items-center gap-2">
+                {sourceLibrary.length > 0 ? (
+                  <button
+                    onClick={clearFile}
+                    className="flex items-center gap-1 rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500 transition-colors hover:text-red-500"
+                    type="button"
+                  >
+                    <X size={14} /> Clear
+                  </button>
+                ) : (
+                  <span className="rounded-full border border-slate-200 px-3 py-1 text-xs text-slate-500">Ready</span>
+                )}
+              </div>
+            </header>
+
+            {isParsing ? (
+              <div className="border-b border-indigo-100 bg-indigo-50/70 px-4 py-2 md:px-6">
+                <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-indigo-700">
+                  <span>{parseStage === "uploading" ? "Uploading PDF" : "Processing uploaded file"}</span>
+                  {parseStage === "uploading" ? <span>{Math.max(0, Math.min(100, parseProgress))}%</span> : null}
+                </div>
+                {parseStage === "uploading" ? (
+                  <div className="h-1.5 overflow-hidden rounded-full bg-indigo-100">
+                    <div
+                      className="h-full rounded-full bg-indigo-500 transition-all duration-300"
+                      style={{ width: `${Math.max(0, Math.min(100, parseProgress))}%` }}
+                    />
+                  </div>
+                ) : (
+                  <p className="text-[11px] font-medium text-indigo-700/90">Upload complete. Waiting for parser response...</p>
+                )}
+              </div>
+            ) : null}
+
+            <div
+              className={`grid min-h-0 flex-1 grid-cols-1 gap-0 ${
+                isCompactWorkspace
+                  ? isDualPaneCompact
+                    ? "md:grid-cols-2"
+                    : ""
+                  : sourceCollapsedDesktop && chatCollapsedDesktop
+                    ? "xl:grid-cols-[52px_52px]"
+                    : sourceCollapsedDesktop
+                      ? "xl:grid-cols-[52px_minmax(0,1fr)]"
+                      : chatCollapsedDesktop
+                        ? "xl:grid-cols-[minmax(0,1fr)_52px]"
+                        : "xl:grid-cols-2"
+              }`}
+            >
+              {showSourcePane && sourceCollapsedDesktop ? (
+                <div className="hidden border-r border-slate-100 bg-slate-50/40 xl:flex xl:flex-col xl:items-center xl:py-5">
                   <button
                     type="button"
-                    onClick={() => setIsSourceCollapsed(true)}
-                    className="hidden items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 xl:inline-flex"
-                    aria-label="Minimize source panel"
+                    onClick={() => setIsSourceCollapsed(false)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+                    aria-label="Expand source panel"
                   >
-                    <ChevronLeft size={14} /> Minimize
+                    <ChevronRight size={16} />
                   </button>
-                ) : null}
-              </div>
-
-              <div
-                {...getRootProps()}
-                className={`mb-4 flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-dashed px-4 py-3 transition-colors ${
-                  isDragActive
-                    ? "border-indigo-500 bg-indigo-50"
-                    : "border-slate-200 bg-slate-50/60 hover:border-indigo-300 hover:bg-white"
-                }`}
-              >
-                <input {...getInputProps()} />
-                <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-indigo-500 shadow-sm">
-                  <UploadCloud size={20} />
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-700">{sourceLibrary.length > 0 ? "Add another source PDF" : "Drop exam paper PDF here"}</p>
-                  <p className="text-xs text-slate-500">Drag and drop, or click to browse</p>
-                </div>
-              </div>
+              ) : showSourcePane ? (
+                <div className="min-h-0 overflow-y-auto border-r border-slate-100 px-4 py-4 md:px-6 md:py-5">
+                  <div className="mb-3 flex items-center justify-between">
+                    <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-600">
+                      <BookOpen size={16} /> Source Panel
+                    </h2>
+                    {!isCompactWorkspace ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsSourceCollapsed(true)}
+                        className="hidden items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 xl:inline-flex"
+                        aria-label="Minimize source panel"
+                      >
+                        <ChevronLeft size={14} /> Minimize
+                      </button>
+                    ) : null}
+                  </div>
 
-              {sourceLibrary.length > 0 ? (
-                <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Source Library ({sourceLibrary.length})</p>
-                  <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
-                    {sourceLibrary.map((source) => (
-                      <div key={source.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
-                        <div className="mb-2 flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            checked={source.selected}
-                            onChange={(event) => setSourceSelected(source.id, event.target.checked)}
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setActiveSourceId(source.id);
-                              setSourceText(source.text);
-                            }}
-                            className={`flex-1 truncate text-left text-xs font-medium ${
-                              activeSourceId === source.id ? "text-indigo-700" : "text-slate-700"
-                            }`}
-                            title={source.name}
-                          >
-                            {source.name}
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => removeSource(source.id)}
-                            className="rounded px-1 text-slate-400 hover:bg-slate-100 hover:text-rose-500"
-                            aria-label={`Remove ${source.name}`}
-                          >
-                            <X size={13} />
-                          </button>
-                        </div>
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[11px] font-medium text-slate-500">Role</span>
-                          <select
-                            value={source.role}
-                            onChange={(event) => setSourceRole(source.id, event.target.value as SourceRole)}
-                            className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
-                          >
-                            <option value="question-paper">Question Paper</option>
-                            <option value="marking-scheme">Marking Scheme</option>
-                            <option value="model-answer">Model Answer</option>
-                            <option value="notes">Notes</option>
-                          </select>
-                        </div>
+                  <div
+                    {...getRootProps()}
+                    className={`mb-4 flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-dashed px-4 py-3 transition-colors ${
+                      isDragActive
+                        ? "border-indigo-500 bg-indigo-50"
+                        : "border-slate-200 bg-slate-50/60 hover:border-indigo-300 hover:bg-white"
+                    }`}
+                  >
+                    <input {...getInputProps()} />
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white text-indigo-500 shadow-sm">
+                      <UploadCloud size={20} />
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-slate-700">{sourceLibrary.length > 0 ? "Add another source PDF" : "Drop exam paper PDF here"}</p>
+                      <p className="text-xs text-slate-500">Drag and drop, or click to browse</p>
+                    </div>
+                  </div>
+
+                  {sourceLibrary.length > 0 ? (
+                    <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Source Library ({sourceLibrary.length})</p>
+                      <div className="max-h-40 space-y-2 overflow-y-auto pr-1">
+                        {sourceLibrary.map((source) => (
+                          <div key={source.id} className="rounded-lg border border-slate-200 bg-slate-50 p-2">
+                            <div className="mb-2 flex items-center gap-2">
+                              <input
+                                type="checkbox"
+                                checked={source.selected}
+                                onChange={(event) => setSourceSelected(source.id, event.target.checked)}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setActiveSourceId(source.id);
+                                  setSourceText(source.text);
+                                }}
+                                className={`flex-1 truncate text-left text-xs font-medium ${
+                                  activeSourceId === source.id ? "text-indigo-700" : "text-slate-700"
+                                }`}
+                                title={source.name}
+                              >
+                                {source.name}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => removeSource(source.id)}
+                                className="rounded px-1 text-slate-400 hover:bg-slate-100 hover:text-rose-500"
+                                aria-label={`Remove ${source.name}`}
+                              >
+                                <X size={13} />
+                              </button>
+                            </div>
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[11px] font-medium text-slate-500">Role</span>
+                              <select
+                                value={source.role}
+                                onChange={(event) => setSourceRole(source.id, event.target.value as SourceRole)}
+                                className="rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] text-slate-700"
+                              >
+                                <option value="question-paper">Question Paper</option>
+                                <option value="marking-scheme">Marking Scheme</option>
+                                <option value="model-answer">Model Answer</option>
+                                <option value="notes">Notes</option>
+                              </select>
+                            </div>
+                          </div>
+                        ))}
                       </div>
-                    ))}
+                    </div>
+                  ) : null}
+
+                  {parseDiagnostics ? (
+                    <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3">
+                      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Parse Diagnostics</p>
+                      <div className="space-y-2">
+                        {parseDiagnostics.passes.map((pass) => (
+                          <div key={`${pass.pass}-${pass.jobId ?? "none"}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                            <p className="font-semibold text-slate-700">
+                              {pass.pass} {parseDiagnostics.selectedPass === pass.pass ? "(used)" : ""}
+                            </p>
+                            <p>
+                              upload: {pass.uploadStatus} | poll: {pass.pollStatus ?? "n/a"} | chars: {pass.extractedChars}
+                            </p>
+                            {pass.error ? <p className="text-rose-600">error: {pass.error}</p> : null}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+
+                  <div className="min-h-[220px] max-h-[36dvh] overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/70 p-4 xl:h-[calc(100vh-292px)] xl:max-h-none">
+                    <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
+                      <BookOpen size={16} /> Source View {activeSource ? `- ${sourceRoleLabel[activeSource.role]}` : ""}
+                    </h2>
+                    <div className="app-ui-content prose prose-sm max-w-none text-slate-700">
+                      {(activeSource?.text || sourceText) ? (
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeSource?.text || sourceText}</ReactMarkdown>
+                      ) : (
+                        <p className="text-sm italic text-slate-400">
+                          {isParsing ? "Extracting text and tables with LlamaParse..." : "No parsed content yet."}
+                        </p>
+                      )}
+                    </div>
                   </div>
                 </div>
               ) : null}
 
-              {parseDiagnostics ? (
-                <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3">
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Parse Diagnostics</p>
-                  <div className="space-y-2">
-                    {parseDiagnostics.passes.map((pass) => (
-                      <div key={`${pass.pass}-${pass.jobId ?? "none"}`} className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                        <p className="font-semibold text-slate-700">
-                          {pass.pass} {parseDiagnostics.selectedPass === pass.pass ? "(used)" : ""}
-                        </p>
-                        <p>
-                          upload: {pass.uploadStatus} | poll: {pass.pollStatus ?? "n/a"} | chars: {pass.extractedChars}
-                        </p>
-                        {pass.error ? <p className="text-rose-600">error: {pass.error}</p> : null}
+              {showChatPane && chatCollapsedDesktop ? (
+                <div className="hidden border-l border-slate-100 bg-slate-50/40 xl:flex xl:flex-col xl:items-center xl:py-5">
+                  <button
+                    type="button"
+                    onClick={() => setIsChatCollapsed(false)}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+                    aria-label="Expand chat panel"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                </div>
+              ) : showChatPane ? (
+                <div className="relative flex min-h-0 flex-col px-4 py-4 md:px-6 md:py-5">
+                  <h2 className="mb-3 flex items-center justify-between gap-2 text-sm font-semibold text-slate-600">
+                    <span>Exam AI Chat</span>
+                    {!isCompactWorkspace ? (
+                      <button
+                        type="button"
+                        onClick={() => setIsChatCollapsed(true)}
+                        className="hidden items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 xl:inline-flex"
+                        aria-label="Minimize chat panel"
+                      >
+                        Minimize <ChevronRight size={14} />
+                      </button>
+                    ) : null}
+                  </h2>
+                  <div
+                    className={`overflow-y-auto ${
+                      isCompactWorkspace
+                        ? "min-h-[250px] flex-1 pb-3"
+                        : "min-h-[260px] max-h-[48dvh] pb-4 lg:h-[calc(100vh-260px)] lg:max-h-none lg:pb-24"
+                    }`}
+                  >
+                    {workspaceMessages.length === 0 ? (
+                      <div className="rounded-xl border border-dashed border-slate-200 p-5 text-sm text-slate-400">
+                        Ask Exam AI to generate questions, answer keys, or revision drills.
                       </div>
-                    ))}
+                    ) : (
+                      workspaceMessages.map((m) => {
+                        const messageText = getMessageText(m);
+                        const isStreamingAssistantMessage =
+                          workspaceIsLoading && m.role === "assistant" && m.id === latestWorkspaceAssistantId;
+
+                        return (
+                          <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
+                            <div
+                              className={`max-w-[88%] rounded-2xl px-4 py-3 ${
+                                m.role === "user"
+                                  ? "bg-slate-100 text-slate-800"
+                                  : "border border-slate-100 bg-white text-slate-800 shadow-sm"
+                              }`}
+                            >
+                              {isStreamingAssistantMessage ? (
+                                <pre className="app-ui-content whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{messageText}</pre>
+                              ) : (
+                                <div className="app-ui-content prose prose-sm max-w-none prose-indigo">
+                                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{messageText}</ReactMarkdown>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    )}
+                    {workspaceIsLoading && <p className="animate-pulse text-sm text-indigo-500">Generating...</p>}
+                  </div>
+                  <div
+                    className={`pointer-events-none mt-3 ${
+                      isCompactWorkspace
+                        ? "sticky bottom-0 z-10 bg-gradient-to-t from-white via-white/95 to-transparent pt-3"
+                        : "md:absolute md:right-6 md:bottom-6 md:left-6 md:mt-0"
+                    }`}
+                  >
+                    <form
+                      onSubmit={handleSubmit}
+                      className={`pointer-events-auto flex items-center gap-2 rounded-2xl p-2 pl-4 backdrop-blur ${
+                        isCompactWorkspace
+                          ? "border border-slate-200 bg-white shadow-lg"
+                          : "border border-white/50 bg-white/75 shadow-xl"
+                      }`}
+                    >
+                      <button type="button" className="text-slate-400 transition-colors hover:text-slate-600" aria-label="Attach">
+                        <Paperclip size={20} />
+                      </button>
+                      <input
+                        type="text"
+                        value={input}
+                        onChange={(event) => setInput(event.target.value)}
+                        placeholder="Ask Exam AI..."
+                        className="flex-1 border-none bg-transparent px-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none"
+                        disabled={workspaceIsLoading}
+                      />
+                      <button
+                        type="submit"
+                        disabled={workspaceIsLoading || !input.trim()}
+                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500 text-white transition-colors hover:bg-indigo-600 disabled:bg-slate-300"
+                        aria-label="Send"
+                      >
+                        <ArrowUp size={18} strokeWidth={3} />
+                      </button>
+                    </form>
                   </div>
                 </div>
               ) : null}
-
-              <div className="min-h-[240px] max-h-[42dvh] overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/70 p-4 xl:h-[calc(100vh-292px)] xl:max-h-none">
-                <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
-                  <BookOpen size={16} /> Source View {activeSource ? `- ${sourceRoleLabel[activeSource.role]}` : ""}
-                </h2>
-                <div className="app-ui-content prose prose-sm max-w-none text-slate-700">
-                  {(activeSource?.text || sourceText) ? (
-                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeSource?.text || sourceText}</ReactMarkdown>
-                  ) : (
-                    <p className="text-sm italic text-slate-400">
-                      {isParsing ? "Extracting text and tables with LlamaParse..." : "No parsed content yet."}
-                    </p>
-                  )}
-                </div>
-              </div>
             </div>
-          ) : null}
+          </section>
+        ) : null}
 
-          {(!isCompactWorkspace || workspaceCompactPane === "chat") && isChatCollapsed ? (
-            <div className="hidden border-l border-slate-100 bg-slate-50/40 xl:flex xl:flex-col xl:items-center xl:py-5">
+        {showEnginePane ? (
+          <aside
+            className={`flex w-full rounded-2xl border border-slate-100 bg-slate-50/70 p-4 transition-all duration-300 lg:h-full ${
+              !isCompactWorkspace && isEngineCollapsed
+                ? "min-h-[56px] flex-col items-center justify-center lg:w-[56px]"
+                : "flex-col overflow-y-auto p-4 md:p-5 lg:w-[390px]"
+            }`}
+          >
+            {isEngineCollapsed ? (
               <button
                 type="button"
-                onClick={() => setIsChatCollapsed(false)}
-                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
-                aria-label="Expand chat panel"
+                onClick={() => setIsEngineCollapsed(false)}
+                className="mt-1 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+                aria-label="Expand examiner engine"
               >
                 <ChevronLeft size={16} />
               </button>
-            </div>
-          ) : (!isCompactWorkspace || workspaceCompactPane === "chat") ? (
-          <div className="relative min-h-0 px-4 py-4 md:px-6 md:py-5">
-            <h2 className="mb-3 flex items-center justify-between gap-2 text-sm font-semibold text-slate-600">
-              <span>Exam AI Chat</span>
-              {!isCompactWorkspace ? (
-                <button
-                  type="button"
-                  onClick={() => setIsChatCollapsed(true)}
-                  className="hidden items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 xl:inline-flex"
-                  aria-label="Minimize chat panel"
-                >
-                  Minimize <ChevronRight size={14} />
-                </button>
-              ) : null}
-            </h2>
-            <div className="min-h-[260px] max-h-[48dvh] overflow-y-auto pb-4 lg:h-[calc(100vh-260px)] lg:max-h-none lg:pb-24">
-              {workspaceMessages.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-200 p-5 text-sm text-slate-400">
-                  Ask Exam AI to generate questions, answer keys, or revision drills.
-                </div>
-              ) : (
-                workspaceMessages.map((m) => {
-                  const messageText = getMessageText(m);
-                  const isStreamingAssistantMessage =
-                    workspaceIsLoading && m.role === "assistant" && m.id === latestWorkspaceAssistantId;
-
-                  return (
-                    <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
-                      <div
-                        className={`max-w-[88%] rounded-2xl px-4 py-3 ${
-                          m.role === "user"
-                            ? "bg-slate-100 text-slate-800"
-                            : "border border-slate-100 bg-white text-slate-800 shadow-sm"
-                        }`}
-                      >
-                        {isStreamingAssistantMessage ? (
-                          <pre className="app-ui-content whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{messageText}</pre>
-                        ) : (
-                          <div className="app-ui-content prose prose-sm max-w-none prose-indigo">
-                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{messageText}</ReactMarkdown>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })
-              )}
-              {workspaceIsLoading && <p className="animate-pulse text-sm text-indigo-500">Generating...</p>}
-            </div>
-            <div className="pointer-events-none mt-3 md:absolute md:right-6 md:bottom-6 md:left-6 md:mt-0">
-              <form
-                onSubmit={handleSubmit}
-                className="pointer-events-auto flex items-center gap-2 rounded-2xl border border-white/50 bg-white/75 p-2 pl-4 shadow-xl backdrop-blur"
-              >
-                <button type="button" className="text-slate-400 transition-colors hover:text-slate-600" aria-label="Attach">
-                  <Paperclip size={20} />
-                </button>
-                <input
-                  type="text"
-                  value={input}
-                  onChange={(event) => setInput(event.target.value)}
-                  placeholder="Ask Exam AI..."
-                  className="flex-1 border-none bg-transparent px-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none"
-                  disabled={workspaceIsLoading}
-                />
-                <button
-                  type="submit"
-                  disabled={workspaceIsLoading || !input.trim()}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500 text-white transition-colors hover:bg-indigo-600 disabled:bg-slate-300"
-                  aria-label="Send"
-                >
-                  <ArrowUp size={18} strokeWidth={3} />
-                </button>
-              </form>
-            </div>
-          </div>
-          ) : null}
-        </div>
-      </section>
-      ) : null}
-
-      {(!isCompactWorkspace || workspaceCompactPane === "engine") ? (
-      <aside
-        className={`flex w-full rounded-2xl border border-slate-100 bg-slate-50/70 p-4 transition-all duration-300 lg:h-full ${
-          !isCompactWorkspace && isEngineCollapsed
-            ? "min-h-[56px] flex-col items-center justify-center lg:w-[56px]"
-            : "flex-col overflow-y-auto p-4 md:p-5 lg:w-[390px]"
-        }`}
-      >
-        {isEngineCollapsed ? (
-          <button
-            type="button"
-            onClick={() => setIsEngineCollapsed(false)}
-            className="mt-1 inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
-            aria-label="Expand examiner engine"
-          >
-            <ChevronLeft size={16} />
-          </button>
-        ) : (
-          <>
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-800">
-                <ChartSpline size={18} className="text-slate-500" /> Examiner&apos;s Engine
-              </h2>
-              <button
-                type="button"
-                onClick={() => setIsEngineCollapsed(true)}
-                className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
-                aria-label="Minimize examiner engine"
-              >
-                Minimize <ChevronRight size={14} />
-              </button>
-            </div>
-
-            <div className="mb-6 grid grid-cols-2 gap-3">
-              {studioTools.map((tool) => {
-                const Icon = tool.icon;
-                return (
+            ) : (
+              <>
+                <div className="mb-4 flex items-center justify-between gap-3">
+                  <h2 className="flex items-center gap-2 text-lg font-semibold text-slate-800">
+                    <ChartSpline size={18} className="text-slate-500" /> Examiner&apos;s Engine
+                  </h2>
                   <button
-                    key={tool.id}
-                    onClick={tool.onClick}
-                    className={`group flex min-h-28 flex-col items-start justify-start gap-2 rounded-xl border bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-                      activeTool === tool.id ? "border-indigo-300" : "border-slate-200"
-                    }`}
                     type="button"
+                    onClick={() => setIsEngineCollapsed(true)}
+                    className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+                    aria-label="Minimize examiner engine"
                   >
-                    <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${tool.tone}`}>
-                      <Icon size={16} />
-                    </span>
-                    <span className="text-xs font-semibold text-slate-700">{tool.label}</span>
-                    <span className="text-[11px] text-slate-500">{tool.desc}</span>
+                    Minimize <ChevronRight size={14} />
                   </button>
-                );
-              })}
-            </div>
+                </div>
 
-            <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-2 text-sm font-semibold text-slate-500">Tool Windows</h3>
-              <p className="mb-3 text-xs text-slate-500">
-                Open dedicated mini-app windows for focused grading and timed practice workflows.
-              </p>
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={() => openWindow("grade-answer")}
-                  className="inline-flex items-center gap-1 rounded-lg bg-indigo-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-600"
-                >
-                  <PencilLine size={13} /> Grade Window
-                </button>
-                <button
-                  type="button"
-                  onClick={openTimedWindow}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-                >
-                  <Timer size={13} /> Timer Window
-                </button>
-              </div>
-            </div>
+                <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  {studioTools.map((tool) => {
+                    const Icon = tool.icon;
+                    return (
+                      <button
+                        key={tool.id}
+                        onClick={tool.onClick}
+                        className={`group flex min-h-28 flex-col items-start justify-start gap-2 rounded-xl border bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                          activeTool === tool.id ? "border-indigo-300" : "border-slate-200"
+                        }`}
+                        type="button"
+                      >
+                        <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${tool.tone}`}>
+                          <Icon size={16} />
+                        </span>
+                        <span className="text-xs font-semibold text-slate-700">{tool.label}</span>
+                        <span className="text-[11px] text-slate-500">{tool.desc}</span>
+                      </button>
+                    );
+                  })}
+                </div>
 
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-              <h3 className="mb-3 text-sm font-semibold text-slate-500">Recent Activity</h3>
-              <ul className="space-y-2 text-xs text-slate-600">
-                <li className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                  {sourceLibrary.length > 0 ? `Sources loaded: ${sourceLibrary.length}` : "No source loaded"}
-                </li>
-                <li className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                  {sourceLibrary.some((item) => item.text.trim()) ? "Parsed source available" : "Waiting for parsing"}
-                </li>
-                <li className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
-                  {workspaceMessages.length > 0 ? `Chat messages: ${workspaceMessages.length}` : "No chat messages yet"}
-                </li>
-              </ul>
-            </div>
-          </>
-        )}
-      </aside>
-      ) : null}
-    </div>
-  );
+                <div className="mb-6 rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="mb-2 text-sm font-semibold text-slate-500">Tool Windows</h3>
+                  <p className="mb-3 text-xs text-slate-500">
+                    Open dedicated mini-app windows for focused grading and timed practice workflows.
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openWindow("grade-answer")}
+                      className="inline-flex items-center gap-1 rounded-lg bg-indigo-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-600"
+                    >
+                      <PencilLine size={13} /> Grade Window
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openTimedWindow}
+                      className="inline-flex items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
+                    >
+                      <Timer size={13} /> Timer Window
+                    </button>
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <h3 className="mb-3 text-sm font-semibold text-slate-500">Recent Activity</h3>
+                  <ul className="space-y-2 text-xs text-slate-600">
+                    <li className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                      {sourceLibrary.length > 0 ? `Sources loaded: ${sourceLibrary.length}` : "No source loaded"}
+                    </li>
+                    <li className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                      {sourceLibrary.some((item) => item.text.trim()) ? "Parsed source available" : "Waiting for parsing"}
+                    </li>
+                    <li className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2">
+                      {workspaceMessages.length > 0 ? `Chat messages: ${workspaceMessages.length}` : "No chat messages yet"}
+                    </li>
+                  </ul>
+                </div>
+              </>
+            )}
+          </aside>
+        ) : null}
+      </div>
+    );
+  };
 
   const renderVaultView = () => (
     <div className="flex min-w-0 flex-1 overflow-visible p-3 md:overflow-hidden md:p-4">
