@@ -78,6 +78,7 @@ const MIN_WINDOW_HEIGHT = 340;
 const A4_RATIO_PORTRAIT = Math.SQRT2;
 const MOCK_PAPER_A4_WIDTH_PX = 794;
 const MOCK_PAPER_A4_HEIGHT_PX = Math.round(MOCK_PAPER_A4_WIDTH_PX * A4_RATIO_PORTRAIT);
+const WORKSPACE_LOCAL_STORAGE_KEY_PREFIX = "examos-workspace";
 const TOOL_CREDIT_COSTS = {
   timedSection: 0,
   parsePdf: 1,
@@ -633,6 +634,8 @@ export default function Home() {
     drafts: PersistedDrafts;
   };
 
+  const getWorkspaceLocalStorageKey = (userId: string) => `${WORKSPACE_LOCAL_STORAGE_KEY_PREFIX}:${userId}`;
+
   const {
     messages: workspaceMessages,
     sendMessage: sendWorkspaceMessage,
@@ -737,7 +740,7 @@ export default function Home() {
   const [userCredits, setUserCredits] = useState(20);
   const [isInfiniteCredits, setIsInfiniteCredits] = useState(false);
   const [creditError, setCreditError] = useState<string | null>(null);
-  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const [autoSaveStatus, setAutoSaveStatus] = useState<"idle" | "saving" | "saved-local" | "saved-cloud" | "error">("idle");
   const isCreditsDepleted = !isInfiniteCredits && userCredits <= 0;
   const [marketplacePanel, setMarketplacePanel] = useState<MarketplacePanel>("store");
   const hasHydratedWorkspace = useRef(false);
@@ -880,12 +883,72 @@ export default function Home() {
 
     let cancelled = false;
 
+    const applyWorkspace = (workspace: {
+      sourceLibrary?: SourceItem[];
+      activeSourceId?: string | null;
+      sourceText?: string | null;
+      cover?: Partial<PersistedCover> | null;
+      drafts?: Partial<PersistedDrafts> | null;
+    }) => {
+      const validRoles: SourceRole[] = ["question-paper", "marking-scheme", "model-answer", "notes"];
+      const nextSources = Array.isArray(workspace.sourceLibrary)
+        ? workspace.sourceLibrary.filter(
+            (item): item is SourceItem =>
+              typeof item?.id === "string" &&
+              typeof item.name === "string" &&
+              typeof item.role === "string" &&
+              validRoles.includes(item.role as SourceRole) &&
+              typeof item.text === "string" &&
+              typeof item.selected === "boolean",
+          )
+        : [];
+
+      const persistedActiveId =
+        typeof workspace.activeSourceId === "string" && nextSources.some((item) => item.id === workspace.activeSourceId)
+          ? workspace.activeSourceId
+          : null;
+
+      setIsParsing(false);
+      setParseDiagnostics(null);
+      setSourceLibrary(nextSources);
+      setSourcePdfUrls({});
+      setActiveSourceId(persistedActiveId);
+      setSourceText(
+        typeof workspace.sourceText === "string"
+          ? workspace.sourceText
+          : nextSources.find((item) => item.id === persistedActiveId)?.text ?? "",
+      );
+
+      if (workspace.cover) {
+        if (typeof workspace.cover.learnerName === "string") setLearnerName(workspace.cover.learnerName);
+        if (typeof workspace.cover.examDateInput === "string") setExamDateInput(workspace.cover.examDateInput);
+        if (typeof workspace.cover.focusSubject === "string") setFocusSubject(workspace.cover.focusSubject);
+        if (typeof workspace.cover.streakDays === "number") setStreakDays(Math.max(0, workspace.cover.streakDays));
+        if (typeof workspace.cover.dailyMission === "string") setDailyMission(workspace.cover.dailyMission);
+      }
+
+      if (workspace.drafts) {
+        if (typeof workspace.drafts.gradingAnswer === "string") setGradingAnswer(workspace.drafts.gradingAnswer);
+        if (typeof workspace.drafts.markingRulesDraft === "string") setMarkingRulesDraft(workspace.drafts.markingRulesDraft);
+        if (typeof workspace.drafts.answerKeyOutput === "string") setAnswerKeyOutput(workspace.drafts.answerKeyOutput);
+        if (typeof workspace.drafts.gradingFeedbackDraft === "string") setGradingFeedbackDraft(workspace.drafts.gradingFeedbackDraft);
+        if (typeof workspace.drafts.topicPredictorDraft === "string") setTopicPredictorDraft(workspace.drafts.topicPredictorDraft);
+        if (
+          workspace.drafts.mockPaperDifficulty === "balanced" ||
+          workspace.drafts.mockPaperDifficulty === "exam-hard" ||
+          workspace.drafts.mockPaperDifficulty === "mostly-medium"
+        ) {
+          setMockPaperDifficulty(workspace.drafts.mockPaperDifficulty);
+        }
+        if (typeof workspace.drafts.timedSectionName === "string") setTimedSectionName(workspace.drafts.timedSectionName);
+        if (typeof workspace.drafts.timedMinutes === "number") setTimedMinutes(Math.max(1, workspace.drafts.timedMinutes));
+        if (typeof workspace.drafts.showTemplateUnderlay === "boolean") setShowTemplateUnderlay(workspace.drafts.showTemplateUnderlay);
+      }
+    };
+
     const loadWorkspace = async () => {
       try {
         const response = await fetch("/api/workspace", { method: "GET" });
-        if (!response.ok) {
-          return;
-        }
 
         const result = (await response.json()) as {
           workspace?: {
@@ -897,65 +960,23 @@ export default function Home() {
           } | null;
         };
 
-        if (cancelled || !result.workspace) {
+        if (cancelled) {
           return;
         }
 
-        const workspace = result.workspace;
-        const validRoles: SourceRole[] = ["question-paper", "marking-scheme", "model-answer", "notes"];
-        const nextSources = Array.isArray(workspace.sourceLibrary)
-          ? workspace.sourceLibrary.filter(
-              (item): item is SourceItem =>
-                typeof item?.id === "string" &&
-                typeof item.name === "string" &&
-                typeof item.role === "string" &&
-                validRoles.includes(item.role as SourceRole) &&
-                typeof item.text === "string" &&
-                typeof item.selected === "boolean",
-            )
-          : [];
-
-        const persistedActiveId =
-          typeof workspace.activeSourceId === "string" && nextSources.some((item) => item.id === workspace.activeSourceId)
-            ? workspace.activeSourceId
-            : null;
-
-        setIsParsing(false);
-        setParseDiagnostics(null);
-        setSourceLibrary(nextSources);
-        setSourcePdfUrls({});
-        setActiveSourceId(persistedActiveId);
-        setSourceText(
-          typeof workspace.sourceText === "string"
-            ? workspace.sourceText
-            : nextSources.find((item) => item.id === persistedActiveId)?.text ?? "",
-        );
-
-        if (workspace.cover) {
-          if (typeof workspace.cover.learnerName === "string") setLearnerName(workspace.cover.learnerName);
-          if (typeof workspace.cover.examDateInput === "string") setExamDateInput(workspace.cover.examDateInput);
-          if (typeof workspace.cover.focusSubject === "string") setFocusSubject(workspace.cover.focusSubject);
-          if (typeof workspace.cover.streakDays === "number") setStreakDays(Math.max(0, workspace.cover.streakDays));
-          if (typeof workspace.cover.dailyMission === "string") setDailyMission(workspace.cover.dailyMission);
+        if (response.ok && result.workspace) {
+          applyWorkspace(result.workspace);
+          return;
         }
 
-        if (workspace.drafts) {
-          if (typeof workspace.drafts.gradingAnswer === "string") setGradingAnswer(workspace.drafts.gradingAnswer);
-          if (typeof workspace.drafts.markingRulesDraft === "string") setMarkingRulesDraft(workspace.drafts.markingRulesDraft);
-          if (typeof workspace.drafts.answerKeyOutput === "string") setAnswerKeyOutput(workspace.drafts.answerKeyOutput);
-          if (typeof workspace.drafts.gradingFeedbackDraft === "string") setGradingFeedbackDraft(workspace.drafts.gradingFeedbackDraft);
-          if (typeof workspace.drafts.topicPredictorDraft === "string") setTopicPredictorDraft(workspace.drafts.topicPredictorDraft);
-          if (
-            workspace.drafts.mockPaperDifficulty === "balanced" ||
-            workspace.drafts.mockPaperDifficulty === "exam-hard" ||
-            workspace.drafts.mockPaperDifficulty === "mostly-medium"
-          ) {
-            setMockPaperDifficulty(workspace.drafts.mockPaperDifficulty);
-          }
-          if (typeof workspace.drafts.timedSectionName === "string") setTimedSectionName(workspace.drafts.timedSectionName);
-          if (typeof workspace.drafts.timedMinutes === "number") setTimedMinutes(Math.max(1, workspace.drafts.timedMinutes));
-          if (typeof workspace.drafts.showTemplateUnderlay === "boolean") setShowTemplateUnderlay(workspace.drafts.showTemplateUnderlay);
+        const localKey = getWorkspaceLocalStorageKey(session.user.id);
+        const localRaw = window.localStorage.getItem(localKey);
+        if (!localRaw) {
+          return;
         }
+
+        const localWorkspace = JSON.parse(localRaw) as PersistedWorkspace;
+        applyWorkspace(localWorkspace);
       } finally {
         if (!cancelled) {
           hasHydratedWorkspace.current = true;
@@ -1000,6 +1021,14 @@ export default function Home() {
       },
     };
 
+    const localKey = getWorkspaceLocalStorageKey(session.user.id);
+    try {
+      window.localStorage.setItem(localKey, JSON.stringify(payload));
+      setAutoSaveStatus("saved-local");
+    } catch {
+      // Ignore localStorage quota/private mode issues and continue with server save attempt.
+    }
+
     latestWorkspaceSaveRequestId.current += 1;
     const requestId = latestWorkspaceSaveRequestId.current;
     setAutoSaveStatus("saving");
@@ -1014,7 +1043,7 @@ export default function Home() {
           return;
         }
 
-        setAutoSaveStatus(response.ok ? "saved" : "error");
+        setAutoSaveStatus(response.ok ? "saved-cloud" : "error");
       })
       .catch(() => {
         if (requestId !== latestWorkspaceSaveRequestId.current) {
@@ -2531,6 +2560,14 @@ ${getSourceContext()}
       },
     };
 
+    const localKey = getWorkspaceLocalStorageKey(session.user.id);
+    try {
+      window.localStorage.setItem(localKey, JSON.stringify(payload));
+      setAutoSaveStatus("saved-local");
+    } catch {
+      // Ignore local storage failures and continue with server save.
+    }
+
     latestWorkspaceSaveRequestId.current += 1;
     const requestId = latestWorkspaceSaveRequestId.current;
     setAutoSaveStatus("saving");
@@ -2546,7 +2583,7 @@ ${getSourceContext()}
         return;
       }
 
-      setAutoSaveStatus(response.ok ? "saved" : "error");
+      setAutoSaveStatus(response.ok ? "saved-cloud" : "error");
     } catch {
       if (requestId !== latestWorkspaceSaveRequestId.current) {
         return;
@@ -2993,8 +3030,10 @@ ${getSourceContext()}
                 <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600">
                   {autoSaveStatus === "saving" ? (
                     <LoaderCircle size={12} className="animate-spin text-indigo-500" />
-                  ) : autoSaveStatus === "saved" ? (
+                  ) : autoSaveStatus === "saved-cloud" ? (
                     <CheckCircle2 size={12} className="text-emerald-500" />
+                  ) : autoSaveStatus === "saved-local" ? (
+                    <ShieldCheck size={12} className="text-amber-500" />
                   ) : autoSaveStatus === "error" ? (
                     <X size={12} className="text-rose-500" />
                   ) : (
@@ -3002,8 +3041,10 @@ ${getSourceContext()}
                   )}
                   {autoSaveStatus === "saving"
                     ? "Saving"
-                    : autoSaveStatus === "saved"
-                      ? "Auto-saved"
+                    : autoSaveStatus === "saved-cloud"
+                      ? "Saved to cloud"
+                      : autoSaveStatus === "saved-local"
+                        ? "Saved locally"
                       : autoSaveStatus === "error"
                         ? "Save failed"
                         : "Auto-save"}
