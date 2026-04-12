@@ -11,6 +11,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowUp,
   BarChart3,
+  BadgeDollarSign,
   BookOpen,
   ChartSpline,
   ChevronLeft,
@@ -317,7 +318,7 @@ const DraggableWindow = ({
 };
 
 export default function Home() {
-  type AppView = "workspace" | "vault" | "analytics" | "syllabus";
+  type AppView = "workspace" | "vault" | "analytics" | "syllabus" | "purchase";
   type CoverEditableField = "learnerName" | "examDate" | "focusSubject" | "streakDays" | "dailyMission";
   type WindowId = "answer-key" | "grade-answer" | "marking-rules" | "topic-predictor" | "timed-section";
   type DesktopWindow = {
@@ -3015,6 +3016,62 @@ ${getSourceContext()}
     </div>
   );
 
+  const renderPurchaseView = () => (
+    <div className="flex min-w-0 flex-1 overflow-visible p-3 md:overflow-hidden md:p-4">
+      <section className="flex min-w-0 flex-1 flex-col rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
+        <h1 className="mb-1 text-xl font-semibold text-slate-800">Credit Store</h1>
+        <p className="mb-6 text-sm text-slate-500">Choose a one-time credit pack. No subscription required.</p>
+
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <article className="relative rounded-2xl border-2 border-indigo-300 bg-gradient-to-b from-indigo-50 to-white p-5 shadow-sm">
+            <span className="absolute -top-3 right-4 rounded-full bg-indigo-600 px-3 py-1 text-[11px] font-semibold text-white">
+              Most Popular
+            </span>
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-indigo-600">Starter Pack</p>
+            <p className="mt-2 text-3xl font-semibold text-slate-900">USD 4.99</p>
+            <p className="mt-1 text-sm text-slate-600">500 credits</p>
+            <div className="mt-4 rounded-lg border border-indigo-100 bg-white p-3 text-sm text-slate-700">
+              First purchase bonus: <span className="font-semibold text-indigo-700">1.5x credits</span>
+              <p className="mt-1 text-xs text-slate-500">You receive 750 credits on your first purchase.</p>
+            </div>
+            <button
+              type="button"
+              className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+            >
+              Purchase 500 Credits
+            </button>
+          </article>
+
+          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Value Pack</p>
+            <p className="mt-2 text-3xl font-semibold text-slate-900">USD 8.99</p>
+            <p className="mt-1 text-sm text-slate-600">1000 credits</p>
+            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+              First purchase bonus: <span className="font-semibold text-indigo-700">1.5x credits</span>
+              <p className="mt-1 text-xs text-slate-500">You receive 1500 credits on your first purchase.</p>
+            </div>
+            <button
+              type="button"
+              className="mt-5 inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              Purchase 1000 Credits
+            </button>
+          </article>
+        </div>
+
+        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.12em] text-slate-600">Credit Policy</h2>
+          <ul className="space-y-2 text-sm text-slate-700">
+            <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">No expiry: credits never expire.</li>
+            <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">No refund: credit purchases are non-refundable.</li>
+            <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">Non-transferable: credits cannot be transferred between accounts.</li>
+            <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">First purchase only: 1.5x bonus applies once per account.</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  );
+
   const dockWindows = Object.values(desktopState.windows)
     .filter((windowState) => windowState.isOpen)
     .sort((left, right) => left.zIndex - right.zIndex);
@@ -3500,6 +3557,9 @@ ${getSourceContext()}
           <button className={navClass("workspace")} aria-label="Dashboard" onClick={() => setActiveView("workspace")}>
             <HomeIcon size={20} />
           </button>
+          <button className={navClass("purchase")} aria-label="Credit Store" onClick={() => setActiveView("purchase")}>
+            <BadgeDollarSign size={20} />
+          </button>
           <button className={navClass("vault")} aria-label="Past Papers" onClick={() => setActiveView("vault")}>
             <FolderOpen size={20} />
           </button>
@@ -3522,6 +3582,7 @@ ${getSourceContext()}
       </nav>
 
       {activeView === "workspace" && renderWorkspaceView()}
+      {activeView === "purchase" && renderPurchaseView()}
       {activeView === "vault" && renderVaultView()}
       {activeView === "analytics" && renderAnalyticsView()}
       {activeView === "syllabus" && renderSyllabusView()}
@@ -3530,6 +3591,9 @@ ${getSourceContext()}
         <div className="grid grid-cols-5 gap-1">
           <button className={navClass("workspace")} aria-label="Dashboard" onClick={() => setActiveView("workspace")}>
             <HomeIcon size={18} />
+          </button>
+          <button className={navClass("purchase")} aria-label="Credit Store" onClick={() => setActiveView("purchase")}>
+            <BadgeDollarSign size={18} />
           </button>
           <button className={navClass("vault")} aria-label="Past Papers" onClick={() => setActiveView("vault")}>
             <FolderOpen size={18} />
@@ -3540,14 +3604,14 @@ ${getSourceContext()}
           <button className={navClass("syllabus")} aria-label="Settings" onClick={() => setActiveView("syllabus")}>
             <Settings size={18} />
           </button>
-          <button
-            className="rounded-xl p-2 text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-700"
-            aria-label="Sign out"
-            onClick={handleSignOut}
-          >
-            <LogOut size={18} />
-          </button>
         </div>
+        <button
+          className="mt-2 w-full rounded-xl p-2 text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-700"
+          aria-label="Sign out"
+          onClick={handleSignOut}
+        >
+          <LogOut size={18} className="mx-auto" />
+        </button>
       </nav>
 
       <DraggableWindow
