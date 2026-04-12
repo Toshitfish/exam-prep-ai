@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useReducer, useRef, useState, FormEvent, ReactNode } from "react";
 import { useChat } from "@ai-sdk/react";
 import { signIn, signOut, useSession } from "next-auth/react";
+import { useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { IBM_Plex_Sans, Sora } from "next/font/google";
@@ -667,6 +668,7 @@ export default function Home() {
   ];
   const [motivationIndex, setMotivationIndex] = useState(() => new Date().getDate() % motivationLines.length);
   const { data: session, status: authStatus } = useSession();
+  const searchParams = useSearchParams();
   const isAuthenticated = authStatus === "authenticated";
   const isAuthLoading = authStatus === "loading";
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
@@ -684,6 +686,25 @@ export default function Home() {
 
     setLearnerName(session.user.name);
   }, [session?.user?.name]);
+
+  useEffect(() => {
+    const rawError = searchParams.get("authError") || searchParams.get("error");
+    if (!rawError) {
+      return;
+    }
+
+    if (rawError === "OAuthAccountNotLinked") {
+      setAuthError("This email is already linked to another sign-in method. Try your original method or another Google account.");
+      return;
+    }
+
+    if (rawError === "AccessDenied") {
+      setAuthError("Google sign-in access denied. Please try another account.");
+      return;
+    }
+
+    setAuthError("Google sign-in failed. Please try again.");
+  }, [searchParams]);
 
   useEffect(() => {
     if (!isAuthenticated || !session?.user?.id) {
