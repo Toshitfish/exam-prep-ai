@@ -1022,8 +1022,10 @@ export default function Home() {
     };
 
     const localKey = getWorkspaceLocalStorageKey(session.user.id);
+    let didSaveLocal = false;
     try {
       window.localStorage.setItem(localKey, JSON.stringify(payload));
+      didSaveLocal = true;
       setAutoSaveStatus("saved-local");
     } catch {
       // Ignore localStorage quota/private mode issues and continue with server save attempt.
@@ -1043,14 +1045,14 @@ export default function Home() {
           return;
         }
 
-        setAutoSaveStatus(response.ok ? "saved-cloud" : "error");
+        setAutoSaveStatus(response.ok ? "saved-cloud" : didSaveLocal ? "saved-local" : "error");
       })
       .catch(() => {
         if (requestId !== latestWorkspaceSaveRequestId.current) {
           return;
         }
 
-        setAutoSaveStatus("error");
+        setAutoSaveStatus(didSaveLocal ? "saved-local" : "error");
         // Keep autosave silent; next user action retries automatically.
     });
   }, [
@@ -2561,8 +2563,10 @@ ${getSourceContext()}
     };
 
     const localKey = getWorkspaceLocalStorageKey(session.user.id);
+    let didSaveLocal = false;
     try {
       window.localStorage.setItem(localKey, JSON.stringify(payload));
+      didSaveLocal = true;
       setAutoSaveStatus("saved-local");
     } catch {
       // Ignore local storage failures and continue with server save.
@@ -2583,13 +2587,13 @@ ${getSourceContext()}
         return;
       }
 
-      setAutoSaveStatus(response.ok ? "saved-cloud" : "error");
+      setAutoSaveStatus(response.ok ? "saved-cloud" : didSaveLocal ? "saved-local" : "error");
     } catch {
       if (requestId !== latestWorkspaceSaveRequestId.current) {
         return;
       }
 
-      setAutoSaveStatus("error");
+      setAutoSaveStatus(didSaveLocal ? "saved-local" : "error");
     }
   };
 
