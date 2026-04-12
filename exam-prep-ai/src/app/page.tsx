@@ -668,6 +668,8 @@ export default function Home() {
   const [mockPaperGenerationStage, setMockPaperGenerationStage] = useState<MockPaperGenerationStage>("idle");
   const [sourcePdfUrls, setSourcePdfUrls] = useState<Record<string, string>>({});
   const [showTemplateUnderlay, setShowTemplateUnderlay] = useState(true);
+  const [mockPaperPreviewZoom, setMockPaperPreviewZoom] = useState(100);
+  const [mockPaperCompactPages, setMockPaperCompactPages] = useState(true);
   const [gradingExportFormat, setGradingExportFormat] = useState<"doc" | "pdf">("doc");
   const [gradingFeedbackDraft, setGradingFeedbackDraft] = useState("");
   const [isEditingGradingFeedback, setIsEditingGradingFeedback] = useState(false);
@@ -698,6 +700,7 @@ export default function Home() {
   const [animatedWorkspaceText, setAnimatedWorkspaceText] = useState("");
   const lastAnimatedAssistantId = useRef<string | null>(null);
   const sourcePdfUrlsRef = useRef<Record<string, string>>({});
+  const mockPaperPreviewRef = useRef<HTMLDivElement | null>(null);
 
   const buildLearnerProfileContext = () => {
     const safeName = learnerName.trim() || "Scholar";
@@ -1292,6 +1295,30 @@ export default function Home() {
     return true;
   };
 
+  const buildMockPaperPreviewExportHtml = (fileNameBase: string) => {
+    const previewRoot = mockPaperPreviewRef.current;
+    const renderedPages = previewRoot ? Array.from(previewRoot.querySelectorAll<HTMLElement>(".mock-paper-preview-page")) : [];
+    if (renderedPages.length === 0) {
+      return null;
+    }
+
+    const pagesHtml = renderedPages.map((page) => page.outerHTML).join("\n");
+    const headStyles = Array.from(document.querySelectorAll("style, link[rel='stylesheet']"))
+      .map((node) => node.outerHTML)
+      .join("\n");
+
+    return `<!doctype html><html><head><meta charset="utf-8" /><base href="${window.location.origin}/" /><title>${fileNameBase}</title>${headStyles}<style>
+      body { margin: 0; background: #eef2f7; }
+      .export-wrap { max-width: 860px; margin: 18px auto; padding: 0 8px 18px; }
+      .mock-paper-preview-page { page-break-after: always; }
+      .mock-paper-preview-page:last-child { page-break-after: auto; }
+      @media print {
+        body { background: #fff; }
+        .export-wrap { max-width: none; margin: 0; padding: 0; }
+      }
+    </style></head><body><main class="export-wrap">${pagesHtml}</main></body></html>`;
+  };
+
   const exportMockPaperOutput = (format: "doc" | "pdf") => {
     const content = answerKeyOutput.trim();
     if (!content) {
@@ -1299,7 +1326,36 @@ export default function Home() {
       return;
     }
 
-    const ok = exportTextOutput(content, format, "Generated Mock Paper");
+    const fileNameBase = "Generated Mock Paper";
+    const previewHtml = buildMockPaperPreviewExportHtml(fileNameBase);
+    let ok = false;
+
+    if (previewHtml) {
+      if (format === "doc") {
+        const blob = new Blob([previewHtml], { type: "application/msword;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement("a");
+        link.href = url;
+        link.download = `${fileNameBase.toLowerCase().replace(/\s+/g, "-")}.doc`;
+        link.click();
+        URL.revokeObjectURL(url);
+        ok = true;
+      } else {
+        const printWindow = window.open("", "_blank", "noopener,noreferrer,width=900,height=700");
+        if (printWindow) {
+          printWindow.document.open();
+          printWindow.document.write(previewHtml);
+          printWindow.document.close();
+          printWindow.focus();
+          printWindow.print();
+          ok = true;
+        }
+      }
+    } else {
+      setAnswerKeyError("Preview is not ready yet. Generate the paper first, then export.");
+      return;
+    }
+
     if (!ok) {
       setAnswerKeyError("Popup blocked. Please allow popups to export PDF.");
     }
@@ -3606,15 +3662,36 @@ ${getSourceContext()}
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <h3 className="text-sm font-semibold text-slate-700">Generated Mock Paper</h3>
-              <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
-                <input
-                  type="checkbox"
-                  checked={showTemplateUnderlay}
-                  onChange={(event) => setShowTemplateUnderlay(event.target.checked)}
-                  className="h-3.5 w-3.5 rounded border-slate-300"
-                />
-                Template PDF Underlay
-              </label>
+              <div className="flex flex-wrap items-center gap-2">
+                <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={showTemplateUnderlay}
+                    onChange={(event) => setShowTemplateUnderlay(event.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-slate-300"
+                  />
+                  Template PDF Underlay
+                </label>
+                <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={mockPaperCompactPages}
+                    onChange={(event) => setMockPaperCompactPages(event.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-slate-300"
+                  />
+                  Compact Pages
+                </label>
+                <select
+                  value={mockPaperPreviewZoom}
+                  onChange={(event) => setMockPaperPreviewZoom(Number(event.target.value))}
+                  className="rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-600"
+                  aria-label="Mock paper preview zoom"
+                >
+                  <option value={90}>Fit Width (90%)</option>
+                  <option value={100}>100%</option>
+                  <option value={110}>110%</option>
+                </select>
+              </div>
             </div>
             {answerKeyOutput ? (
               isEditingAnswerKeyOutput ? (
@@ -3624,7 +3701,7 @@ ${getSourceContext()}
                   className="h-[360px] w-full resize-none rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
                 />
               ) : (
-                <div className="rounded-xl border border-slate-200 bg-slate-100 p-3">
+                <div ref={mockPaperPreviewRef} className="rounded-xl border border-slate-200 bg-slate-100 p-3">
                   <div className={`${showTemplateUnderlay && templatePreviewPdfUrl ? "grid gap-4 xl:grid-cols-2" : "block"}`}>
                     {showTemplateUnderlay && templatePreviewPdfUrl ? (
                       <div className="rounded-lg border border-slate-300 bg-white p-2 shadow-sm">
@@ -3641,7 +3718,11 @@ ${getSourceContext()}
 
                     <div className="mx-auto w-full max-w-[820px] space-y-4">
                       {getMockPaperPages(answerKeyOutput).map((page, index) => (
-                        <div key={`mock-paper-page-${index}`} className="mock-paper-preview-page rounded-sm border border-slate-300 bg-white px-10 py-8 shadow-sm">
+                        <div
+                          key={`mock-paper-page-${index}`}
+                          className={`mock-paper-preview-page ${mockPaperCompactPages ? "mock-paper-preview-page--compact" : ""} rounded-sm border border-slate-300 bg-white px-10 py-8 shadow-sm`}
+                          style={{ zoom: mockPaperPreviewZoom / 100 }}
+                        >
                           <div className="mock-paper-preview app-ui-content prose prose-sm max-w-none text-slate-800">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>{page}</ReactMarkdown>
                           </div>
