@@ -34,12 +34,34 @@ const buildChatPanelPolicy = (userName: string) =>
     "When helpful, end with a short checklist the user can act on immediately.",
   ].join(" ");
 
-const trimGroundedUserText = (text: string, keepSourceContext: boolean) => {
-  if (keepSourceContext) {
+const MAX_RECENT_MESSAGES = 6;
+const MAX_LATEST_SOURCE_CHARS = 9000;
+const MAX_OLDER_ASSISTANT_CHARS = 1400;
+const MAX_LATEST_ASSISTANT_CHARS = 2200;
+
+const trimText = (text: string, maxChars: number) => {
+  if (text.length <= maxChars) {
     return text;
   }
+  return `${text.slice(0, maxChars)}\n\n[trimmed for context size]`;
+};
 
+const trimGroundedUserText = (text: string, keepSourceContext: boolean) => {
   const questionMatch = text.match(/User question:\s*([\s\S]*?)\n\nUploaded source context:/i);
+  const sourceMatch = text.match(/Uploaded source context:\s*([\s\S]*)$/i);
+
+  if (keepSourceContext) {
+    if (!sourceMatch) {
+      return trimText(text, MAX_LATEST_SOURCE_CHARS + 1200);
+    }
+
+    const sourceBlock = trimText(sourceMatch[1].trim(), MAX_LATEST_SOURCE_CHARS);
+    const questionBlock = questionMatch?.[1]?.trim() ?? "";
+    const prefix = text.replace(/Uploaded source context:[\s\S]*$/i, "").trim();
+
+    return `${prefix}\n\nUser question:\n${questionBlock}\n\nUploaded source context:\n${sourceBlock}`.trim();
+  }
+
   if (questionMatch?.[1]) {
     return questionMatch[1].trim();
   }
@@ -51,7 +73,7 @@ const trimGroundedUserText = (text: string, keepSourceContext: boolean) => {
 };
 
 const compactChatMessages = (messages: UIMessage[]) => {
-  const recent = messages.slice(-10);
+  const recent = messages.slice(-MAX_RECENT_MESSAGES);
   const latestUserIndex = (() => {
     for (let index = recent.length - 1; index >= 0; index -= 1) {
       if (recent[index].role === "user") {
@@ -61,25 +83,51 @@ const compactChatMessages = (messages: UIMessage[]) => {
     return -1;
   })();
 
+  const latestAssistantIndex = (() => {
+    for (let index = recent.length - 1; index >= 0; index -= 1) {
+      if (recent[index].role === "assistant") {
+        return index;
+      }
+    }
+    return -1;
+  })();
+
   return recent.map((message, index) => {
-    if (message.role !== "user") {
-      return message;
+    if (message.role === "user") {
+      const keepSourceContext = index === latestUserIndex;
+      return {
+        ...message,
+        parts: message.parts.map((part) => {
+          if (part.type !== "text") {
+            return part;
+          }
+
+          return {
+            ...part,
+            text: trimGroundedUserText(part.text ?? "", keepSourceContext),
+          };
+        }),
+      };
     }
 
-    const keepSourceContext = index === latestUserIndex;
-    return {
-      ...message,
-      parts: message.parts.map((part) => {
-        if (part.type !== "text") {
-          return part;
-        }
+    if (message.role === "assistant") {
+      const maxChars = index === latestAssistantIndex ? MAX_LATEST_ASSISTANT_CHARS : MAX_OLDER_ASSISTANT_CHARS;
+      return {
+        ...message,
+        parts: message.parts.map((part) => {
+          if (part.type !== "text") {
+            return part;
+          }
 
-        return {
-          ...part,
-          text: trimGroundedUserText(part.text ?? "", keepSourceContext),
-        };
-      }),
-    };
+          return {
+            ...part,
+            text: trimText(part.text ?? "", maxChars),
+          };
+        }),
+      };
+    }
+
+    return message;
   });
 };
 
@@ -92,14 +140,20 @@ export async function POST(req: Request) {
   const userName = session.user.name?.trim() || "the learner";
 
   const { messages } = (await req.json()) as { messages: UIMessage[] };
-  const compactMessages = compactChatMessages(messages);
-  const modelMessages = await convertToModelMessages(compactMessages);
+  try {
+    const compactMessages = compactChatMessages(messages);
+    const modelMessages = await convertToModelMessages(compactMessages);
 
-  const result = await streamText({
-    model: openrouter("openrouter/auto"),
-    system: buildChatPanelPolicy(userName),
-    messages: modelMessages,
-  });
+    const result = await streamText({
+      model: openrouter("openrouter/auto"),
+      system: buildChatPanelPolicy(userName),
+      messages: modelMessages,
+      maxRetries: 1,
+    });
 
-  return result.toUIMessageStreamResponse();
+    return result.toUIMessageStreamResponse();
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Chat request failed.";
+    return Response.json({ error: message }, { status: 500 });
+  }
 }

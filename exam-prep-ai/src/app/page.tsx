@@ -348,7 +348,7 @@ export default function Home() {
     windows: {
       "answer-key": {
         id: "answer-key",
-        title: "Generate Answer Key",
+        title: "Generate Mock Paper",
         isOpen: false,
         isMinimized: false,
         isMaximized: false,
@@ -551,6 +551,7 @@ export default function Home() {
   };
   type TopicPrediction = { topic: string; confidence: "High" | "Medium" | "Low"; evidence: string };
   type TopicPredictorData = { predictions: TopicPrediction[]; rawResponse: string };
+  type MockPaperChatMessage = { role: "user" | "assistant"; text: string };
   type ParseDiagnostics = {
     selectedPass: "primary" | "alternate-mode" | "scan-fallback" | "legacy-gpt4o" | null;
     passes: Array<{
@@ -653,9 +654,15 @@ export default function Home() {
   const [markingRulesExportFormat, setMarkingRulesExportFormat] = useState<"doc" | "pdf">("doc");
   const [answerKeyLoading, setAnswerKeyLoading] = useState(false);
   const [answerKeyError, setAnswerKeyError] = useState<string | null>(null);
+  const [mockPaperNotice, setMockPaperNotice] = useState<string | null>(null);
   const [answerKeyOutput, setAnswerKeyOutput] = useState("");
   const [isEditingAnswerKeyOutput, setIsEditingAnswerKeyOutput] = useState(false);
   const [answerKeyExportFormat, setAnswerKeyExportFormat] = useState<"doc" | "pdf">("doc");
+  const [mockPaperDifficulty, setMockPaperDifficulty] = useState<"balanced" | "exam-hard" | "mostly-medium">("balanced");
+  const [mockPaperChatInput, setMockPaperChatInput] = useState("");
+  const [mockPaperChatMessages, setMockPaperChatMessages] = useState<MockPaperChatMessage[]>([]);
+  const [mockPaperChatLoading, setMockPaperChatLoading] = useState(false);
+  const [mockPaperChatError, setMockPaperChatError] = useState<string | null>(null);
   const [gradingExportFormat, setGradingExportFormat] = useState<"doc" | "pdf">("doc");
   const [gradingFeedbackDraft, setGradingFeedbackDraft] = useState("");
   const [isEditingGradingFeedback, setIsEditingGradingFeedback] = useState(false);
@@ -1169,6 +1176,39 @@ export default function Home() {
     return { hasTemplate: true, templateHint: templateLines };
   };
 
+  const getPastPaperTemplateHint = () => {
+    const paperText = sourceLibrary
+      .filter((item) => item.selected && item.role === "question-paper")
+      .map((item) => item.text)
+      .join("\n\n");
+    const source = (paperText || getSourceContext()).trim();
+    if (!source) {
+      return { hasTemplate: false, templateHint: "" };
+    }
+
+    const templateSignals = /(section\s+[a-z]|question\s*\d+|q\d+|total\s*marks|duration|answer\s+all|attempt\s+any|instructions)/i;
+    if (!templateSignals.test(source)) {
+      return { hasTemplate: false, templateHint: "" };
+    }
+
+    const templateLines = source
+      .split("\n")
+      .map((line) => line.trim())
+      .filter((line) => line)
+      .filter(
+        (line) =>
+          /^#{1,4}\s/.test(line) ||
+          /^section\s+[a-z0-9]/i.test(line) ||
+          /^(question\s*\d+|q\d+)/i.test(line) ||
+          /^(time allowed|duration|total marks|instructions)/i.test(line) ||
+          /^[-*]\s+/.test(line),
+      )
+      .slice(0, 40)
+      .join("\n");
+
+    return { hasTemplate: true, templateHint: templateLines };
+  };
+
   const exportTextOutput = (content: string, format: "doc" | "pdf", fileNameBase: string) => {
     const trimmed = content.trim();
     if (!trimmed) {
@@ -1207,14 +1247,14 @@ export default function Home() {
     return true;
   };
 
-  const exportAnswerKeyOutput = (format: "doc" | "pdf") => {
+  const exportMockPaperOutput = (format: "doc" | "pdf") => {
     const content = answerKeyOutput.trim();
     if (!content) {
-      setAnswerKeyError("No generated text to export.");
+      setAnswerKeyError("No generated mock paper to export.");
       return;
     }
 
-    const ok = exportTextOutput(content, format, "Generated Answer Key");
+    const ok = exportTextOutput(content, format, "Generated Mock Paper");
     if (!ok) {
       setAnswerKeyError("Popup blocked. Please allow popups to export PDF.");
     }
@@ -1262,7 +1302,7 @@ export default function Home() {
     return false;
   };
 
-  const generateAnswerKey = async () => {
+  const generateMockPaper = async () => {
     if (!requireSource("workspace") || answerKeyLoading) {
       return;
     }
@@ -1270,53 +1310,141 @@ export default function Home() {
     setActiveTool("answer-key");
     setAnswerKeyLoading(true);
     setAnswerKeyError(null);
-    const { hasTemplate, templateHint } = getMarkingSchemeTemplateHint();
+    setMockPaperNotice(null);
+    setMockPaperChatError(null);
+
+    const hasTopicPredictor = topicPredictorData?.predictions?.length || topicPredictorDraft.trim();
+    if (!hasTopicPredictor) {
+      setMockPaperNotice("Tip: Run Topic Predictor first for higher-quality paper targeting. Continuing with current sources.");
+    }
+
+    const difficultyLabel =
+      mockPaperDifficulty === "exam-hard"
+        ? "Mostly exam-hard"
+        : mockPaperDifficulty === "mostly-medium"
+          ? "Mostly medium"
+          : "Balanced (easy / medium / hard)";
+
+    const topicContext = topicPredictorData?.predictions?.length
+      ? topicPredictorData.predictions
+          .map((prediction, index) => `${index + 1}. ${prediction.topic} (${prediction.confidence}) - ${prediction.evidence}`)
+          .join("\n")
+      : topicPredictorDraft.trim() || "Not available. Ask user to run Topic Predictor for improved targeting.";
+
+    const { hasTemplate, templateHint } = getPastPaperTemplateHint();
 
     const prompt = `
-You are an examiner creating an official marking scheme.
+You are an examiner creating a printable mock exam paper from uploaded sources.
 
 Task:
-- Generate a complete answer key for all identifiable objective sections in this paper (MCQ, true/false, short factual parts).
-  - If question numbering is visible, preserve it exactly.
-  - Use short, direct wording. Remove filler and unnecessary explanation.
-  - Keep each explanation concise (max 14 words per row).
-  - If any answer is uncertain due to scan quality, mark as "Needs verification".
+- Analyze uploaded past papers and all selected sources to infer exam style, question patterns, wording, and mark allocation.
+- Follow the uploaded past paper template as strictly as possible, including section naming, ordering, numbering style, instruction tone, and marks formatting.
+- Difficulty mix for this generation: ${difficultyLabel}.
+- If topic predictions are available, prioritize them while preserving realism.
 
-  Structure requirements:
-  1. **Paper Summary** (2-4 bullets only, each starts with ->)
-  2. **Answer Key** table: Question | Answer | Marking Point
-  3. **Uncertain Items** (only if needed)
+${
+  hasTemplate
+    ? `Template cues from uploaded past paper (must mirror closely):\n${templateHint}`
+    : "Template cues: no clear template extracted. Use standard exam-paper format with clear sections and marks."
+}
 
-  ${
-    hasTemplate
-    ? `Template rule: The uploaded text appears to include a marking scheme. Mirror its structure/labels where possible.\nTemplate cues:\n${templateHint}`
-    : "Template rule: No explicit marking-scheme template detected. Use the structure requirements above."
-  }
+Output requirements (printable template):
+1. **Mock Paper Cover**
+   - Exam title, subject, duration, total marks, candidate instructions.
+2. **Section A (short/objective)**
+   - Numbered questions with marks each.
+3. **Section B (structured/source questions)**
+   - Numbered questions with subparts and marks.
+4. **Section C (essay/long response)**
+   - 1-2 higher-order questions with marks.
+5. **Mark Scheme Appendix**
+   - Concise mark guidance per question/subpart.
+6. **Print Layout Rules**
+   - Clean spacing, page-break friendly headings, and answer lines where suitable.
 
-  Output rules:
-  - Return markdown only.
-  - Keep output compact and highly scannable.
-  - Prefer bullets and short lines over paragraphs.
-  - Use **bold** section labels and -> bullets.
-  - Do not include commentary outside required sections.
+Formatting rules:
+- Return markdown only.
+- Keep headings clear and printable.
+- Use realistic exam wording and mark distribution.
+- Do not include meta commentary.
 
 Source document markdown:
 ${getSourceContext()}
+
+Topic predictor context:
+${topicContext}
 `.trim();
 
     try {
       const responseText = await requestToolOutput(prompt);
-      setAnswerKeyOutput(responseText || "No answer key generated.");
+      setAnswerKeyOutput(responseText || "No mock paper generated.");
       setIsEditingAnswerKeyOutput(false);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Failed to generate answer key.";
+      const message = error instanceof Error ? error.message : "Failed to generate mock paper.";
       setAnswerKeyError(message);
     } finally {
       setAnswerKeyLoading(false);
     }
   };
 
-  const openAnswerKeyWindow = () => {
+  const applyMockPaperEdit = async () => {
+    const instruction = mockPaperChatInput.trim();
+    if (!instruction || mockPaperChatLoading) {
+      return;
+    }
+
+    if (!answerKeyOutput.trim()) {
+      setMockPaperChatError("Generate a mock paper first, then request edits here.");
+      return;
+    }
+
+    setMockPaperChatError(null);
+    setMockPaperChatLoading(true);
+    setMockPaperChatMessages((previous) => [...previous, { role: "user", text: instruction }]);
+    setMockPaperChatInput("");
+
+    const { hasTemplate, templateHint } = getPastPaperTemplateHint();
+
+    const prompt = `
+You are editing an existing mock exam paper.
+
+Goal:
+- Apply the user's modification request to the mock paper.
+- Preserve printable exam structure and keep mark scheme appendix present.
+- Keep alignment with uploaded past paper template.
+
+${
+  hasTemplate
+    ? `Template cues from uploaded past paper (must mirror closely):\n${templateHint}`
+    : "Template cues unavailable. Preserve current paper structure and formatting."
+}
+
+User edit request:
+${instruction}
+
+Current mock paper draft:
+${answerKeyOutput}
+
+Source context:
+${getSourceContext()}
+
+Return ONLY the full updated mock paper in markdown.
+`.trim();
+
+    try {
+      const updatedPaper = await requestToolOutput(prompt);
+      setAnswerKeyOutput(updatedPaper || answerKeyOutput);
+      setMockPaperChatMessages((previous) => [...previous, { role: "assistant", text: "Applied. Mock paper updated." }]);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to apply mock paper edit.";
+      setMockPaperChatError(message);
+      setMockPaperChatMessages((previous) => [...previous, { role: "assistant", text: "I could not apply that edit. Please try rephrasing." }]);
+    } finally {
+      setMockPaperChatLoading(false);
+    }
+  };
+
+  const openMockPaperWindow = () => {
     openWindow("answer-key");
   };
 
@@ -1910,11 +2038,11 @@ ${getSourceContext()}
   const studioTools = [
     {
       id: "answer-key",
-      label: "Generate Answer Key",
-      desc: "Build a full marking scheme from the current paper.",
+      label: "Generate Mock Paper",
+      desc: "Create a printable mock paper from past papers and sources.",
       icon: KeyRound,
       tone: "text-orange-600 bg-orange-50",
-      onClick: openAnswerKeyWindow,
+      onClick: openMockPaperWindow,
     },
     {
       id: "grade-answer",
@@ -2039,7 +2167,7 @@ ${getSourceContext()}
   };
 
   const windowMeta: Record<WindowId, { label: string; icon: typeof Timer }> = {
-    "answer-key": { label: "Answer Key", icon: KeyRound },
+    "answer-key": { label: "Mock Paper", icon: KeyRound },
     "grade-answer": { label: "Grade", icon: PencilLine },
     "marking-rules": { label: "Rules", icon: ShieldCheck },
     "topic-predictor": { label: "Predictor", icon: TrendingUp },
@@ -2376,7 +2504,7 @@ ${getSourceContext()}
                   >
                       {workspaceMessages.length === 0 ? (
                         <div className="rounded-xl border border-dashed border-slate-200 p-5 text-sm text-slate-400 md:mt-1">
-                        Ask Exam AI to generate questions, answer keys, or revision drills.
+                        Ask Exam AI to generate questions, mock papers, or revision drills.
                       </div>
                     ) : (
                       workspaceMessages.map((m) => {
@@ -3218,7 +3346,7 @@ ${getSourceContext()}
 
       <DraggableWindow
         windowId="answer-key"
-        title="Generate Answer Key"
+        title="Generate Mock Paper"
         win={desktopState.windows["answer-key"]}
         isFocused={desktopState.focusedId === "answer-key"}
         onFocus={() => dispatchDesktop({ type: "FOCUS_WINDOW", id: "answer-key" })}
@@ -3230,14 +3358,24 @@ ${getSourceContext()}
         contentClassName="h-full overflow-y-auto p-6"
       >
         <div className="mb-5 flex flex-wrap items-center gap-2">
+          <select
+            value={mockPaperDifficulty}
+            onChange={(event) => setMockPaperDifficulty(event.target.value as "balanced" | "exam-hard" | "mostly-medium")}
+            className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            aria-label="Mock paper difficulty mix"
+          >
+            <option value="balanced">Difficulty: Balanced</option>
+            <option value="exam-hard">Difficulty: Mostly exam-hard</option>
+            <option value="mostly-medium">Difficulty: Mostly medium</option>
+          </select>
           <button
             type="button"
-            onClick={generateAnswerKey}
+            onClick={generateMockPaper}
             disabled={answerKeyLoading}
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-600 disabled:bg-slate-300"
           >
             {answerKeyLoading ? <LoaderCircle size={14} className="animate-spin" /> : <KeyRound size={14} />}
-            Generate Answer Key from Current Paper
+            Generate Mock Paper
           </button>
           <button
             type="button"
@@ -3265,34 +3403,82 @@ ${getSourceContext()}
           </select>
           <button
             type="button"
-            onClick={() => exportAnswerKeyOutput(answerKeyExportFormat)}
+            onClick={() => exportMockPaperOutput(answerKeyExportFormat)}
             disabled={!answerKeyOutput.trim()}
             className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
             Output Text
           </button>
+          {mockPaperNotice ? <p className="text-sm text-amber-600">{mockPaperNotice}</p> : null}
           {answerKeyError ? <p className="text-sm text-rose-500">{answerKeyError}</p> : null}
         </div>
 
-        <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-          <h3 className="mb-3 text-sm font-semibold text-slate-700">Generated Answer Key</h3>
-          {answerKeyOutput ? (
-            isEditingAnswerKeyOutput ? (
-              <textarea
-                value={answerKeyOutput}
-                onChange={(event) => setAnswerKeyOutput(event.target.value)}
-                className="h-[360px] w-full resize-none rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-              />
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="mb-3 text-sm font-semibold text-slate-700">Generated Mock Paper</h3>
+            {answerKeyOutput ? (
+              isEditingAnswerKeyOutput ? (
+                <textarea
+                  value={answerKeyOutput}
+                  onChange={(event) => setAnswerKeyOutput(event.target.value)}
+                  className="h-[360px] w-full resize-none rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                />
+              ) : (
+                <div className="app-ui-content prose prose-sm max-w-none text-slate-700">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{answerKeyOutput}</ReactMarkdown>
+                </div>
+              )
             ) : (
-              <div className="app-ui-content prose prose-sm max-w-none text-slate-700">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{answerKeyOutput}</ReactMarkdown>
-              </div>
-            )
-          ) : (
-            <p className="text-sm text-slate-500">
-              No answer key yet. Click Generate to build an examiner-style key from the loaded paper context.
-            </p>
-          )}
+              <p className="text-sm text-slate-500">
+                No mock paper yet. Click Generate to build a printable exam-style paper with a mark scheme appendix.
+              </p>
+            )}
+          </div>
+
+          <div className="flex min-h-[420px] flex-col rounded-xl border border-slate-200 bg-white p-3">
+            <h3 className="mb-2 text-sm font-semibold text-slate-700">AI Mock Paper Editor</h3>
+            <p className="mb-3 text-xs text-slate-500">Ask AI to modify structure, difficulty, wording, or section composition.</p>
+
+            <div className="mb-3 flex-1 space-y-2 overflow-y-auto rounded-lg border border-slate-100 bg-slate-50 p-2">
+              {mockPaperChatMessages.length === 0 ? (
+                <p className="text-xs text-slate-500">Example: "Make Section B source analysis harder and add 5 more marks."</p>
+              ) : (
+                mockPaperChatMessages.map((message, index) => (
+                  <div key={`${message.role}-${index}`} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
+                    <div
+                      className={`max-w-[92%] rounded-xl px-3 py-2 text-xs leading-5 ${
+                        message.role === "user"
+                          ? "bg-indigo-500 text-white"
+                          : "border border-slate-200 bg-white text-slate-700"
+                      }`}
+                    >
+                      {message.text}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {mockPaperChatError ? <p className="mb-2 text-xs text-rose-500">{mockPaperChatError}</p> : null}
+
+            <div className="flex items-end gap-2">
+              <textarea
+                value={mockPaperChatInput}
+                onChange={(event) => setMockPaperChatInput(event.target.value)}
+                placeholder="Modify this mock paper..."
+                className="h-20 flex-1 resize-none rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              />
+              <button
+                type="button"
+                onClick={applyMockPaperEdit}
+                disabled={mockPaperChatLoading || !mockPaperChatInput.trim()}
+                className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-600 disabled:bg-slate-300"
+              >
+                {mockPaperChatLoading ? <LoaderCircle size={12} className="animate-spin" /> : null}
+                Apply
+              </button>
+            </div>
+          </div>
         </div>
       </DraggableWindow>
 
