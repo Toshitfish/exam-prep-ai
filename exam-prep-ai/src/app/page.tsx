@@ -5,7 +5,7 @@ import { useChat } from "@ai-sdk/react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { IBM_Plex_Sans, Sora } from "next/font/google";
+import { Manrope, Sora } from "next/font/google";
 import { useDropzone } from "react-dropzone";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -40,9 +40,9 @@ const headingFont = Sora({
   weight: ["500", "600", "700"],
 });
 
-const bodyFont = IBM_Plex_Sans({
+const bodyFont = Manrope({
   subsets: ["latin"],
-  weight: ["400", "500", "600"],
+  weight: ["400", "500", "600", "700"],
 });
 
 type FloatingWindowState = {
@@ -1061,6 +1061,19 @@ export default function Home() {
       .filter((part) => part.type === "text")
       .map((part) => part.text ?? "")
       .join("\n");
+
+  const getWorkspaceDisplayText = (text: string, role: string) => {
+    if (role !== "user") {
+      return text;
+    }
+
+    const questionMatch = text.match(/User question:\s*([\s\S]*?)\n\nUploaded source context:/i);
+    if (questionMatch?.[1]) {
+      return questionMatch[1].trim();
+    }
+
+    return text;
+  };
 
   const getSourceContext = () => {
     const selected = sourceLibrary.filter((item) => item.selected && item.text.trim());
@@ -2270,7 +2283,7 @@ ${getSourceContext()}
                       </div>
                     ) : (
                       workspaceMessages.map((m) => {
-                        const messageText = getMessageText(m);
+                        const messageText = getWorkspaceDisplayText(getMessageText(m), m.role);
                         const isStreamingAssistantMessage =
                           workspaceIsLoading && m.role === "assistant" && m.id === latestWorkspaceAssistantId;
 
@@ -2284,9 +2297,9 @@ ${getSourceContext()}
                               }`}
                             >
                               {isStreamingAssistantMessage ? (
-                                <pre className="app-ui-content whitespace-pre-wrap break-words text-sm leading-6 text-slate-700">{messageText}</pre>
+                                <pre className="app-ui-content whitespace-pre-wrap break-words text-[15px] leading-7 text-slate-700">{messageText}</pre>
                               ) : (
-                                <div className="app-ui-content prose prose-sm max-w-none prose-indigo">
+                                <div className="app-ui-content prose prose-sm md:prose-base max-w-none prose-indigo leading-7">
                                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{messageText}</ReactMarkdown>
                                 </div>
                               )}
@@ -2320,7 +2333,7 @@ ${getSourceContext()}
                         value={input}
                         onChange={(event) => setInput(event.target.value)}
                         placeholder="Ask Exam AI..."
-                        className="flex-1 border-none bg-transparent px-2 text-sm text-slate-700 placeholder-slate-400 focus:outline-none"
+                        className="flex-1 border-none bg-transparent px-2 text-[15px] text-slate-700 placeholder-slate-400 focus:outline-none"
                         disabled={workspaceIsLoading}
                       />
                       <button
