@@ -16,6 +16,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CheckCircle2,
+  Chrome,
   FolderOpen,
   Home as HomeIcon,
   KeyRound,
@@ -1624,6 +1625,11 @@ ${getSourceContext()}
     setShowStartupSplash(true);
   };
 
+  const handleGoogleSignIn = async () => {
+    setAuthError(null);
+    await signIn("google", { callbackUrl: "/" });
+  };
+
   const studioTools = [
     {
       id: "answer-key",
@@ -2283,6 +2289,14 @@ ${getSourceContext()}
             >
               <LogIn size={16} /> {authMode === "signin" ? "Continue to ExamOS" : "Create account and continue"}
             </button>
+
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+            >
+              <Chrome size={16} /> {authMode === "signin" ? "Continue with Google" : "Sign up with Google"}
+            </button>
           </form>
 
           <button
@@ -2388,6 +2402,15 @@ ${getSourceContext()}
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.18),transparent_40%),radial-gradient(circle_at_80%_70%,rgba(14,165,233,0.12),transparent_35%),linear-gradient(140deg,#f8fafc,#eef2ff_45%,#ecfeff)]" />
 
         <section className="relative z-10 h-full w-full overflow-hidden border border-white/70 bg-white/88 shadow-2xl backdrop-blur-sm">
+          <button
+            type="button"
+            onClick={handleSignOut}
+            className="absolute top-5 right-5 z-20 inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white/90 px-3 py-2 text-xs font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50"
+            aria-label="Sign out from cover page"
+          >
+            <LogOut size={14} /> Sign out
+          </button>
+
           <motion.div
             aria-hidden
             initial={{ opacity: 0.25, x: -40, y: 20 }}

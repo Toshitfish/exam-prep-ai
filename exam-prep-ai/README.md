@@ -4,7 +4,7 @@ ExamOS is a Next.js study workspace for exam prep with:
 
 - Source upload and parsing for past papers
 - Source-grounded AI chat and generation
-- Real account authentication (email + password)
+- Real account authentication (email/password + Google sign-in)
 - Tool windows for answer key, grading, marking rules, topic prediction, and timed practice
 
 ## 1. Prerequisites
@@ -24,6 +24,8 @@ cp .env.example .env.local
 
 - `NEXTAUTH_SECRET` (long random string)
 - `NEXTAUTH_URL` (use `http://localhost:3000` for local dev)
+- `GOOGLE_CLIENT_ID` (for Google OAuth sign-in)
+- `GOOGLE_CLIENT_SECRET` (for Google OAuth sign-in)
 - `DATABASE_URL` (PostgreSQL connection string from Neon/Supabase/Railway)
 - `OPENROUTER_API_KEY`
 - `LLAMACLOUD_API_KEY` (or `LLAMAPARSE_API_KEY`)
