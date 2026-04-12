@@ -632,6 +632,8 @@ export default function Home() {
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
   const [parseDiagnostics, setParseDiagnostics] = useState<ParseDiagnostics | null>(null);
   const [isParsing, setIsParsing] = useState(false);
+  const [parseProgress, setParseProgress] = useState(0);
+  const [parseStage, setParseStage] = useState<"idle" | "uploading" | "processing" | "failed">("idle");
   const [gradingAnswer, setGradingAnswer] = useState("");
   const [activeTool, setActiveTool] = useState<string | null>(null);
   const [desktopState, dispatchDesktop] = useReducer(desktopReducer, initialDesktopState);
@@ -902,26 +904,95 @@ export default function Home() {
     setSourceText("");
     setParseDiagnostics(null);
     setIsParsing(true);
+    setParseProgress(2);
+    setParseStage("uploading");
 
     const payload = new FormData();
     payload.append("file", file);
 
-    try {
-      const response = await fetch("/api/parse", {
-        method: "POST",
-        body: payload,
+    const requestParse = async () => {
+      return new Promise<{
+        status: number;
+        result: {
+          markdown?: string;
+          warning?: string;
+          error?: string;
+          diagnostics?: ParseDiagnostics;
+        };
+      }>((resolve, reject) => {
+        const xhr = new XMLHttpRequest();
+        let timerId: number | null = null;
+
+        const startProcessing = () => {
+          if (timerId !== null) {
+            return;
+          }
+          setParseStage("processing");
+          timerId = window.setInterval(() => {
+            setParseProgress((previous) => {
+              if (previous >= 95) {
+                return previous;
+              }
+              return Math.min(95, previous + Math.max(1, Math.round((95 - previous) / 10)));
+            });
+          }, 380);
+        };
+
+        xhr.upload.onprogress = (event) => {
+          if (!event.lengthComputable) {
+            return;
+          }
+          const percent = Math.round((event.loaded / event.total) * 45);
+          setParseStage("uploading");
+          setParseProgress(Math.max(3, Math.min(45, percent)));
+        };
+
+        xhr.onreadystatechange = () => {
+          if (xhr.readyState >= 2) {
+            startProcessing();
+          }
+        };
+
+        xhr.onerror = () => {
+          if (timerId !== null) {
+            window.clearInterval(timerId);
+          }
+          reject(new Error("Network error while uploading PDF."));
+        };
+
+        xhr.onload = () => {
+          if (timerId !== null) {
+            window.clearInterval(timerId);
+          }
+
+          let parsedResult: { markdown?: string; warning?: string; error?: string; diagnostics?: ParseDiagnostics } = {};
+          try {
+            parsedResult = JSON.parse(xhr.responseText || "{}") as {
+              markdown?: string;
+              warning?: string;
+              error?: string;
+              diagnostics?: ParseDiagnostics;
+            };
+          } catch {
+            parsedResult = {};
+          }
+
+          resolve({ status: xhr.status, result: parsedResult });
+        };
+
+        xhr.open("POST", "/api/parse");
+        xhr.send(payload);
       });
+    };
 
-      const result = (await response.json().catch(() => ({}))) as {
-        markdown?: string;
-        warning?: string;
-        error?: string;
-        diagnostics?: ParseDiagnostics;
-      };
+    try {
+      const { status, result } = await requestParse();
 
-      if (!response.ok) {
+      if (status < 200 || status >= 300) {
         throw new Error(result.error || "Failed to parse PDF.");
       }
+
+      setParseProgress(100);
 
       const extracted = result.markdown?.trim() || "";
       const parsedText = extracted || (result.warning ? `> OCR note\n\n${result.warning}` : "No text extracted from this PDF.");
@@ -942,10 +1013,18 @@ export default function Home() {
       const message = error instanceof Error ? error.message : "Unknown parsing error.";
       setSourceText(`> Parsing failed\n\n${message}`);
       setParseDiagnostics(null);
+      setParseStage("failed");
+      setParseProgress(0);
     } finally {
       setIsParsing(false);
+      if (parseStage !== "failed") {
+        window.setTimeout(() => {
+          setParseProgress(0);
+          setParseStage("idle");
+        }, 900);
+      }
     }
-  }, []);
+  }, [parseStage]);
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -1936,6 +2015,26 @@ ${getSourceContext()}
                   <p className="text-xs text-slate-500">Drag and drop, or click to browse</p>
                 </div>
               </div>
+
+              {isParsing ? (
+                <div className="mb-4 rounded-xl border border-indigo-100 bg-indigo-50/70 p-3">
+                  <div className="mb-2 flex items-center justify-between text-xs font-semibold text-indigo-700">
+                    <span>{parseStage === "uploading" ? "Uploading PDF" : "Extracting text"}</span>
+                    <span>{Math.max(1, Math.min(100, parseProgress))}%</span>
+                  </div>
+                  <div className="h-2 overflow-hidden rounded-full bg-indigo-100">
+                    <div
+                      className="h-full rounded-full bg-indigo-500 transition-all duration-300"
+                      style={{ width: `${Math.max(1, Math.min(100, parseProgress))}%` }}
+                    />
+                  </div>
+                  <p className="mt-2 text-[11px] text-indigo-700/80">
+                    {parseStage === "uploading"
+                      ? "Sending file to parser..."
+                      : "Running OCR and markdown extraction..."}
+                  </p>
+                </div>
+              ) : null}
 
               {sourceLibrary.length > 0 ? (
                 <div className="mb-4 rounded-xl border border-slate-200 bg-white p-3">
