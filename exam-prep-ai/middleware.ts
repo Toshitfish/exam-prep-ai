@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 
 export function middleware(req: NextRequest) {
-  if (req.nextUrl.pathname.startsWith("/api/auth/signin") && req.method === "GET") {
+  const isSignInPageRequest = req.nextUrl.pathname === "/api/auth/signin";
+  const acceptsHtml = req.headers.get("accept")?.includes("text/html") ?? false;
+
+  // Only redirect real browser page navigations for the signin page.
+  // Do not touch JSON/API fetches used by next-auth client endpoints.
+  if (isSignInPageRequest && req.method === "GET" && acceptsHtml) {
     const redirectUrl = new URL("/", req.url);
     const error = req.nextUrl.searchParams.get("error");
     if (error) {
@@ -14,5 +19,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/api/auth/:path*"],
+  matcher: ["/api/auth/signin"],
 };

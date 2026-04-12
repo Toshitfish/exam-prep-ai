@@ -5,7 +5,7 @@ import { useChat } from "@ai-sdk/react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Manrope, Sora } from "next/font/google";
+import { Inter } from "next/font/google";
 import { useDropzone } from "react-dropzone";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -35,12 +35,12 @@ import {
   X,
 } from "lucide-react";
 
-const headingFont = Sora({
+const headingFont = Inter({
   subsets: ["latin"],
   weight: ["500", "600", "700"],
 });
 
-const bodyFont = Manrope({
+const bodyFont = Inter({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
@@ -1773,10 +1773,16 @@ Use only the uploaded source context below to answer.
 - If information is not present, say: "Not found in uploaded source."
 - Do not use outside facts.
 - Cite section/question labels from the source when possible.
-  - Provide a detailed and structured response using markdown headings.
-  - Preferred structure: ## Direct Answer, ## Source Evidence, ## Key Details, ## Exam Tip.
-  - Under Source Evidence, quote or paraphrase specific source lines/labels that support each claim.
-  - If the prompt is simple, keep Direct Answer short but still include supporting evidence.
+- Provide a detailed and structured response in this exact order:
+  1) Direct Answer
+  2) Source Evidence
+  3) Key Details
+  4) In Short
+- Write each section label on its own line exactly as shown above.
+- In Source Evidence, use bullet points and include citation tags like [1], [2], [3].
+- Each citation must map to a specific source section/question label from uploaded content.
+- In Key Details, prefer bullet labels such as Immediate Cause, Core Objective, Impact, Significance.
+- Keep wording exam-ready, clear, and specific.
 
   Learner profile:
   ${buildLearnerProfileContext()}
@@ -2346,7 +2352,7 @@ ${getSourceContext()}
                               {isStreamingAssistantMessage ? (
                                 <pre className="app-ui-content chat-typing-cursor whitespace-pre-wrap break-words text-[15px] leading-7 text-slate-700">{messageText}</pre>
                               ) : (
-                                <div className="app-ui-content prose prose-sm md:prose-base max-w-none prose-indigo leading-7">
+                                <div className="app-ui-content prose prose-sm md:prose-base max-w-none prose-slate prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-li:my-1 leading-7">
                                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{messageText}</ReactMarkdown>
                                 </div>
                               )}
