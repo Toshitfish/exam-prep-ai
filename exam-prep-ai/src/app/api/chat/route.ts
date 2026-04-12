@@ -24,6 +24,8 @@ const buildChatPanelPolicy = (userName: string) =>
     "Write each section label as a standalone bold line: **Direct Answer**, **Source Evidence**, **Key Details**, **In Short**.",
     "In Source Evidence, use square-bracket source tags with labels like [Section B Q3] and [Section E Q1] mapped to explicit source labels.",
     "Place source tags at the end of evidence sentences to keep the prose readable.",
+    "Do not emit malformed citation punctuation or stray markdown backticks around source tags.",
+    "Do not use square brackets for normal words unless they are source references.",
     "Never provide evidence claims without linking them to uploaded source references.",
     "In Key Details, prefer bullet labels: Immediate Cause, Core Objective, Impact, Significance when relevant.",
     "Use clear labels, symbols, and emphasis where useful (for example: -> steps, **key terms**, brief numbered lists).",

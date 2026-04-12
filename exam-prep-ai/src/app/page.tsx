@@ -1079,9 +1079,15 @@ export default function Home() {
   const normalizeSourceReferenceTags = (text: string) => {
     // Convert plain square-bracket source references into inline code so markdown rendering
     // can style them as citation badges (for example: [Section B Q3], [Q1], [Source 2]).
-    return text.replace(/\[(Section[^\]]+|Q\s*\d+[^\]]*|Question\s*\d+[^\]]*|Source\s*\d+[^\]]*|\d+)\]/gi, (match) => {
-      return `\`${match}\``;
-    });
+    const cleaned = text
+      // Remove accidental doubled backticks that can appear between adjacent citation tags.
+      .replace(/`\s*`\s*(?=\[(Section|Q\s*\d|Question\s*\d|Source\s*\d|\d)[^\]]*\])/gi, " ")
+      .replace(/``+/g, "`");
+
+    return cleaned.replace(
+      /(^|[^`])\[(Section[^\]]+|Q\s*\d+[^\]]*|Question\s*\d+[^\]]*|Source\s*\d+[^\]]*|\d+)\](?!`)/gi,
+      (match, prefix, label) => `${prefix}\`[${label}]\``,
+    );
   };
 
   const renderWorkspaceMarkdown = (text: string) => (
@@ -1820,6 +1826,8 @@ Use only the uploaded source context below to answer.
 - In Source Evidence, use source tags in square brackets with labels (for example: [Section B Q3], [Section E Q1]).
 - Place source tags at the end of the supporting sentence so they do not interrupt reading flow.
 - Each source tag must map to a specific source section/question label from uploaded content.
+- Do not output stray markdown backticks around source tags.
+- Do not attach source tags to plain words that are not source labels.
 - In Key Details, prefer bullet labels such as Immediate Cause, Core Objective, Impact, Significance.
 - Keep wording exam-ready, clear, and specific.
 
@@ -2387,12 +2395,12 @@ ${getSourceContext()}
                               }`}
                             >
                               {isStreamingAssistantMessage ? (
-                                <div className="memo-response app-ui-content prose prose-sm md:prose-base max-w-none prose-slate prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-li:my-1 leading-7">
+                                <div className="memo-response app-ui-content prose prose-sm max-w-none prose-slate prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-li:my-1 text-[14px] leading-6">
                                   {renderWorkspaceMarkdown(messageText)}
                                   <span className="chat-typing-cursor-inline" aria-hidden="true" />
                                 </div>
                               ) : (
-                                <div className="memo-response app-ui-content prose prose-sm md:prose-base max-w-none prose-slate prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-li:my-1 prose-code:bg-orange-50 prose-code:text-orange-500 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:font-medium prose-code:before:content-none prose-code:after:content-none leading-7">
+                                <div className="memo-response app-ui-content prose prose-sm max-w-none prose-slate prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-li:my-1 prose-code:bg-orange-50 prose-code:text-orange-500 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:font-medium prose-code:before:content-none prose-code:after:content-none text-[14px] leading-6">
                                   {renderWorkspaceMarkdown(messageText)}
                                 </div>
                               )}
@@ -2439,7 +2447,7 @@ ${getSourceContext()}
                         value={input}
                         onChange={(event) => setInput(event.target.value)}
                         placeholder="Ask Exam AI..."
-                        className="flex-1 border-none bg-transparent px-2 text-[15px] text-slate-700 placeholder-slate-400 focus:outline-none"
+                        className="flex-1 border-none bg-transparent px-2 text-[14px] text-slate-700 placeholder-slate-400 focus:outline-none"
                         disabled={workspaceIsLoading}
                       />
                       <button
