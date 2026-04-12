@@ -1928,9 +1928,9 @@ ${getSourceContext()}
   };
 
   const renderWorkspaceView = () => (
-    <div className="flex min-w-0 flex-1 gap-4 overflow-hidden p-4">
+    <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-visible p-3 md:p-4 lg:flex-row lg:overflow-hidden">
       <section className="relative m-0 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
-        <header className="flex items-center justify-between border-b border-slate-100 px-6 py-4">
+        <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3 md:px-6 md:py-4">
           <div className="flex items-center gap-3">
             <BookOpen size={18} className="text-slate-400" />
             <h1 className="text-lg font-semibold text-slate-800">Exam Workspace</h1>
@@ -1951,7 +1951,7 @@ ${getSourceContext()}
         </header>
 
         {isParsing ? (
-          <div className="border-b border-indigo-100 bg-indigo-50/70 px-6 py-2">
+          <div className="border-b border-indigo-100 bg-indigo-50/70 px-4 py-2 md:px-6">
             <div className="mb-1 flex items-center justify-between text-[11px] font-semibold text-indigo-700">
               <span>{parseStage === "uploading" ? "Uploading PDF" : "Processing uploaded file"}</span>
               {parseStage === "uploading" ? <span>{Math.max(0, Math.min(100, parseProgress))}%</span> : null}
@@ -1986,7 +1986,7 @@ ${getSourceContext()}
               </button>
             </div>
           ) : (
-            <div className="min-h-0 overflow-y-auto border-r border-slate-100 px-6 py-5">
+            <div className="min-h-0 overflow-y-auto border-r border-slate-100 px-4 py-4 md:px-6 md:py-5">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-600">
                   <BookOpen size={16} /> Source Panel
@@ -2091,7 +2091,7 @@ ${getSourceContext()}
                 </div>
               ) : null}
 
-              <div className="h-[calc(100vh-292px)] overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/70 p-4">
+              <div className="min-h-[240px] max-h-[42dvh] overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/70 p-4 lg:h-[calc(100vh-292px)] lg:max-h-none">
                 <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
                   <BookOpen size={16} /> Source View {activeSource ? `- ${sourceRoleLabel[activeSource.role]}` : ""}
                 </h2>
@@ -2108,9 +2108,9 @@ ${getSourceContext()}
             </div>
           )}
 
-          <div className="relative min-h-0 px-6 py-5">
+          <div className="relative min-h-0 px-4 py-4 md:px-6 md:py-5">
             <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-600">Exam AI Chat</h2>
-            <div className="h-[calc(100vh-260px)] overflow-y-auto pb-24">
+            <div className="min-h-[260px] max-h-[48dvh] overflow-y-auto pb-4 lg:h-[calc(100vh-260px)] lg:max-h-none lg:pb-24">
               {workspaceMessages.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-200 p-5 text-sm text-slate-400">
                   Ask Exam AI to generate questions, answer keys, or revision drills.
@@ -2144,7 +2144,7 @@ ${getSourceContext()}
               )}
               {workspaceIsLoading && <p className="animate-pulse text-sm text-indigo-500">Generating...</p>}
             </div>
-            <div className="pointer-events-none absolute right-6 bottom-6 left-6">
+            <div className="pointer-events-none mt-3 md:absolute md:right-6 md:bottom-6 md:left-6 md:mt-0">
               <form
                 onSubmit={handleSubmit}
                 className="pointer-events-auto flex items-center gap-2 rounded-2xl border border-white/50 bg-white/75 p-2 pl-4 shadow-xl backdrop-blur"
@@ -2175,8 +2175,8 @@ ${getSourceContext()}
       </section>
 
       <aside
-        className={`hidden h-full rounded-2xl border border-slate-100 bg-slate-50/70 p-4 transition-all duration-300 lg:flex ${
-          isEngineCollapsed ? "w-[56px] flex-col items-center" : "w-[390px] flex-col overflow-y-auto p-5"
+        className={`flex w-full rounded-2xl border border-slate-100 bg-slate-50/70 p-4 transition-all duration-300 lg:h-full ${
+          isEngineCollapsed ? "min-h-[56px] flex-col items-center justify-center" : "flex-col overflow-y-auto p-4 md:p-5 lg:w-[390px]"
         }`}
       >
         {isEngineCollapsed ? (
@@ -2270,7 +2270,7 @@ ${getSourceContext()}
   );
 
   const renderVaultView = () => (
-    <div className="flex min-w-0 flex-1 overflow-hidden p-4">
+    <div className="flex min-w-0 flex-1 overflow-visible p-3 md:overflow-hidden md:p-4">
       <section className="flex min-w-0 flex-1 flex-col rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
         <h1 className="mb-1 text-xl font-semibold text-slate-800">Past Paper Vault</h1>
         <p className="mb-6 text-sm text-slate-500">Manage uploaded papers and track revision progress by subject.</p>
@@ -2303,7 +2303,7 @@ ${getSourceContext()}
   );
 
   const renderAnalyticsView = () => (
-    <div className="flex min-w-0 flex-1 overflow-hidden p-4">
+    <div className="flex min-w-0 flex-1 overflow-visible p-3 md:overflow-hidden md:p-4">
       <section className="flex min-w-0 flex-1 flex-col rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
         <h1 className="mb-1 text-xl font-semibold text-slate-800">Analytics Radar</h1>
         <p className="mb-6 text-sm text-slate-500">Performance snapshots from your recent exam practice sessions.</p>
@@ -2346,7 +2346,7 @@ ${getSourceContext()}
   );
 
   const renderSyllabusView = () => (
-    <div className="flex min-w-0 flex-1 overflow-hidden p-4">
+    <div className="flex min-w-0 flex-1 overflow-visible p-3 md:overflow-hidden md:p-4">
       <section className="flex min-w-0 flex-1 flex-col rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
         <h1 className="mb-1 text-xl font-semibold text-slate-800">Syllabus Engine</h1>
         <p className="mb-6 text-sm text-slate-500">Configure exam board rules and grading strictness for AI feedback.</p>
@@ -2390,7 +2390,7 @@ ${getSourceContext()}
 
   if (isAuthLoading) {
     return (
-      <main className={`${bodyFont.className} app-ui-chrome flex h-screen w-full items-center justify-center overflow-hidden bg-slate-100 p-4 text-slate-800`}>
+      <main className={`${bodyFont.className} app-ui-chrome flex min-h-dvh w-full items-center justify-center bg-slate-100 p-4 text-slate-800`}>
         <div className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 shadow-sm">
           <LoaderCircle size={16} className="animate-spin" /> Checking session...
         </div>
@@ -2400,7 +2400,7 @@ ${getSourceContext()}
 
   if (!isAuthenticated) {
     return (
-      <main className={`${bodyFont.className} app-ui-chrome flex h-screen w-full items-center justify-center overflow-hidden bg-slate-100 p-4 text-slate-800`}>
+      <main className={`${bodyFont.className} app-ui-chrome flex min-h-dvh w-full items-center justify-center bg-slate-100 p-4 text-slate-800`}>
         <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-xl sm:p-8">
           <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-indigo-600">ExamOS Access</p>
           <h1 className={`${headingFont.className} mb-2 text-3xl font-semibold text-slate-900`}>
@@ -2486,7 +2486,7 @@ ${getSourceContext()}
   if (showStartupSplash) {
     return (
       <motion.main
-        className={`${bodyFont.className} app-ui-chrome relative flex h-screen w-full items-center justify-center overflow-hidden bg-slate-100 text-slate-700`}
+        className={`${bodyFont.className} app-ui-chrome relative flex min-h-dvh w-full items-center justify-center overflow-hidden bg-slate-100 text-slate-700`}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.45 }}
@@ -2566,11 +2566,11 @@ ${getSourceContext()}
             : { opacity: 1, filter: "blur(0px)", y: 0 }
         }
         transition={{ duration: coverTransitioning ? 0.42 : 0.55, ease: [0.22, 1, 0.36, 1] }}
-        className={`${bodyFont.className} app-ui-chrome relative flex h-screen w-full items-stretch justify-center overflow-hidden bg-slate-100 text-slate-800`}
+        className={`${bodyFont.className} app-ui-chrome relative flex min-h-dvh w-full items-stretch justify-center overflow-hidden bg-slate-100 text-slate-800`}
       >
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_20%_20%,rgba(59,130,246,0.18),transparent_40%),radial-gradient(circle_at_80%_70%,rgba(14,165,233,0.12),transparent_35%),linear-gradient(140deg,#f8fafc,#eef2ff_45%,#ecfeff)]" />
 
-        <section className="relative z-10 h-full w-full overflow-hidden border border-white/70 bg-white/88 shadow-2xl backdrop-blur-sm">
+        <section className="relative z-10 min-h-dvh w-full overflow-y-auto border border-white/70 bg-white/88 shadow-2xl backdrop-blur-sm md:h-full md:overflow-hidden">
           <button
             type="button"
             onClick={handleSignOut}
@@ -2596,7 +2596,7 @@ ${getSourceContext()}
           />
 
           <div className="grid grid-cols-1 md:grid-cols-2">
-            <div className="border-b border-slate-200/70 p-8 md:border-r md:border-b-0 md:p-12">
+            <div className="border-b border-slate-200/70 p-6 md:border-r md:border-b-0 md:p-12">
               <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-indigo-600">ExamOS</p>
               <h1 className={`${headingFont.className} mb-2 text-4xl font-semibold leading-tight text-slate-900 md:text-5xl`}>
                 {getGreeting()},
@@ -2672,7 +2672,7 @@ ${getSourceContext()}
               </div>
             </div>
 
-            <div className="p-8 md:p-12">
+            <div className="p-6 pb-24 md:p-12">
               <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <motion.div
                   initial={{ opacity: 0, y: 8 }}
@@ -2860,8 +2860,8 @@ ${getSourceContext()}
   }
 
   return (
-    <main className={`${bodyFont.className} app-ui-chrome flex h-screen w-full bg-slate-50 text-slate-800`}>
-      <nav className="z-10 h-full w-16 flex-shrink-0 border-r border-slate-100 bg-white py-6 flex flex-col items-center">
+    <main className={`${bodyFont.className} app-ui-chrome flex min-h-dvh w-full flex-col bg-slate-50 text-slate-800 md:h-dvh md:flex-row md:overflow-hidden`}>
+      <nav className="z-10 hidden h-full w-16 flex-shrink-0 border-r border-slate-100 bg-white py-6 md:flex md:flex-col md:items-center">
         <div className="mb-8 flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500 text-sm font-bold text-white">
           E
         </div>
@@ -2894,6 +2894,30 @@ ${getSourceContext()}
       {activeView === "vault" && renderVaultView()}
       {activeView === "analytics" && renderAnalyticsView()}
       {activeView === "syllabus" && renderSyllabusView()}
+
+      <nav className="fixed right-3 bottom-3 left-3 z-40 rounded-2xl border border-white/70 bg-white/95 p-2 shadow-xl backdrop-blur md:hidden">
+        <div className="grid grid-cols-5 gap-1">
+          <button className={navClass("workspace")} aria-label="Dashboard" onClick={() => setActiveView("workspace")}>
+            <HomeIcon size={18} />
+          </button>
+          <button className={navClass("vault")} aria-label="Past Papers" onClick={() => setActiveView("vault")}>
+            <FolderOpen size={18} />
+          </button>
+          <button className={navClass("analytics")} aria-label="Analytics" onClick={() => setActiveView("analytics")}>
+            <BarChart3 size={18} />
+          </button>
+          <button className={navClass("syllabus")} aria-label="Settings" onClick={() => setActiveView("syllabus")}>
+            <Settings size={18} />
+          </button>
+          <button
+            className="rounded-xl p-2 text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-700"
+            aria-label="Sign out"
+            onClick={handleSignOut}
+          >
+            <LogOut size={18} />
+          </button>
+        </div>
+      </nav>
 
       <DraggableWindow
         windowId="answer-key"
@@ -3379,7 +3403,7 @@ ${getSourceContext()}
       </DraggableWindow>
 
       {dockWindows.length > 0 && (
-        <div className="fixed bottom-4 left-1/2 z-50 -translate-x-1/2">
+        <div className="fixed bottom-4 left-1/2 z-50 hidden -translate-x-1/2 md:block">
           <div className="flex items-center gap-2 rounded-2xl border border-white/60 bg-white/70 px-3 py-2 shadow-xl backdrop-blur">
             {dockWindows.map((windowState) => {
               const { icon: DockIcon, label } = windowMeta[windowState.id];
