@@ -705,7 +705,8 @@ export default function Home() {
   const [mockPaperChatError, setMockPaperChatError] = useState<string | null>(null);
   const [mockPaperEditQueue, setMockPaperEditQueue] = useState<string[]>([]);
   const [mockPaperGenerationStage, setMockPaperGenerationStage] = useState<MockPaperGenerationStage>("idle");
-  const [mockPaperPreviewZoom, setMockPaperPreviewZoom] = useState(80);
+  const [strictTemplateReplicaMode, setStrictTemplateReplicaMode] = useState(true);
+  const [mockPaperPreviewZoom, setMockPaperPreviewZoom] = useState(100);
   const [sourcePdfUrls, setSourcePdfUrls] = useState<Record<string, string>>({});
   const [showTemplateUnderlay, setShowTemplateUnderlay] = useState(true);
   const [gradingExportFormat, setGradingExportFormat] = useState<"doc" | "pdf">("doc");
@@ -1486,7 +1487,7 @@ export default function Home() {
           /^(time allowed|duration|total marks|instructions)/i.test(line) ||
           /^[-*]\s+/.test(line),
       )
-      .slice(0, 40)
+      .slice(0, 120)
       .join("\n");
 
     return { hasTemplate: true, templateHint: templateLines };
@@ -1709,6 +1710,8 @@ Task:
 - Follow the uploaded past paper template as strictly as possible, including section naming, ordering, numbering style, instruction tone, and marks formatting.
 - Difficulty mix for this generation: ${difficultyLabel}.
 - If topic predictions are available, prioritize them while preserving realism.
+- Template replica mode: ${strictTemplateReplicaMode ? "STRICT" : "RELAXED"}.
+- If STRICT, treat the template as a copy-layout scaffold: preserve line-order skeleton, heading style, punctuation separators, numbering symbols, section labels, and mark-format tokens. Change only exam content/topic wording.
 
 ${
   hasTemplate
@@ -1738,6 +1741,7 @@ Formatting rules:
 - Preserve punctuation symbols, numbering symbols, and separators reflected in the uploaded template.
 - Insert page separators using exactly: [[PAGE_BREAK]] between pages.
 - Keep each page length balanced for print readability.
+- When template cues are present, do not invent a new format. Reuse template skeleton and only replace content.
 
 Source document markdown:
 ${getSourceContext()}
@@ -1808,6 +1812,8 @@ Goal:
 - Keep alignment with uploaded past paper template.
 - Preserve punctuation symbols and visual separators used in the current draft/template.
 - Keep page boundaries with [[PAGE_BREAK]] markers.
+- Template replica mode: ${strictTemplateReplicaMode ? "STRICT" : "RELAXED"}.
+- If STRICT, keep the existing layout scaffold untouched (same heading/order/numbering/mark format) and modify only requested content.
 
 ${
   hasTemplate
@@ -4265,6 +4271,15 @@ ${getSourceContext()}
                   />
                   Template PDF Underlay
                 </label>
+                <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
+                  <input
+                    type="checkbox"
+                    checked={strictTemplateReplicaMode}
+                    onChange={(event) => setStrictTemplateReplicaMode(event.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-slate-300"
+                  />
+                  Strict Replica Mode
+                </label>
               </div>
             </div>
             {answerKeyOutput ? (
@@ -4298,7 +4313,7 @@ ${getSourceContext()}
                       </button>
                       <button
                         type="button"
-                        onClick={() => setMockPaperPreviewZoom(80)}
+                        onClick={() => setMockPaperPreviewZoom(100)}
                         className="rounded-md border border-slate-200 bg-slate-50 px-2.5 py-1 text-xs font-semibold text-slate-700 transition hover:bg-slate-100"
                       >
                         Reset
@@ -4319,43 +4334,48 @@ ${getSourceContext()}
                       </div>
                     ) : null}
 
-                    <div className="mx-auto w-full max-w-[820px] space-y-4">
-                      {getMockPaperPages(answerKeyOutput).map((page, index) => (
-                        <div
-                          key={`mock-paper-page-wrap-${index}`}
-                          className="mx-auto"
-                          style={{
-                            width: `${MOCK_PAPER_A4_WIDTH_PX * previewScale}px`,
-                            height: `${MOCK_PAPER_A4_HEIGHT_PX * previewScale}px`,
-                          }}
-                        >
-                          <div
-                            style={{
-                              transform: `scale(${previewScale})`,
-                              transformOrigin: "top left",
-                              width: `${MOCK_PAPER_A4_WIDTH_PX}px`,
-                              height: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
-                            }}
-                          >
+                    <div className="rounded-lg border border-slate-300 bg-white p-2 shadow-sm">
+                      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Generated Preview</p>
+                      <div className="h-[940px] overflow-y-auto rounded border border-slate-200 bg-slate-50 p-3">
+                        <div className="mx-auto w-full max-w-[820px] space-y-4">
+                          {getMockPaperPages(answerKeyOutput).map((page, index) => (
                             <div
-                              className="mock-paper-preview-page rounded-sm border border-slate-300 bg-white px-10 py-8 shadow-sm"
+                              key={`mock-paper-page-wrap-${index}`}
+                              className="mx-auto"
                               style={{
-                                width: `${MOCK_PAPER_A4_WIDTH_PX}px`,
-                                maxWidth: `${MOCK_PAPER_A4_WIDTH_PX}px`,
-                                height: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
-                                minHeight: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
-                                aspectRatio: "210 / 297",
+                                width: `${MOCK_PAPER_A4_WIDTH_PX * previewScale}px`,
+                                height: `${MOCK_PAPER_A4_HEIGHT_PX * previewScale}px`,
                               }}
                             >
-                              <div className="mock-paper-preview app-ui-content prose prose-sm max-w-none text-slate-800">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{page}</ReactMarkdown>
+                              <div
+                                style={{
+                                  transform: `scale(${previewScale})`,
+                                  transformOrigin: "top left",
+                                  width: `${MOCK_PAPER_A4_WIDTH_PX}px`,
+                                  height: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
+                                }}
+                              >
+                                <div
+                                  className="mock-paper-preview-page rounded-sm border border-slate-300 bg-white px-10 py-8 shadow-sm"
+                                  style={{
+                                    width: `${MOCK_PAPER_A4_WIDTH_PX}px`,
+                                    maxWidth: `${MOCK_PAPER_A4_WIDTH_PX}px`,
+                                    height: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
+                                    minHeight: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
+                                    aspectRatio: "210 / 297",
+                                  }}
+                                >
+                                  <div className="mock-paper-preview app-ui-content prose prose-sm max-w-none font-serif leading-relaxed text-slate-800 prose-headings:font-serif prose-p:my-1 prose-li:my-0.5">
+                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{page}</ReactMarkdown>
+                                  </div>
+                                  <div className="mt-8 border-t border-slate-200 pt-2 text-right text-[11px] text-slate-500">Page {index + 1}</div>
+                                </div>
                               </div>
-                              <div className="mt-8 border-t border-slate-200 pt-2 text-right text-[11px] text-slate-500">Page {index + 1}</div>
                             </div>
-                          </div>
+                          ))}
                         </div>
-                      ))}
-                      <p className="text-[11px] text-slate-500">Template fidelity mode: mirrors uploaded past-paper structure, symbols, and page breaks when available.</p>
+                      </div>
+                      <p className="mt-2 text-[11px] text-slate-500">Template fidelity mode: mirrors uploaded past-paper structure, symbols, and page breaks when available.</p>
                     </div>
                   </div>
                 </div>
