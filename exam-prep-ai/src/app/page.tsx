@@ -3077,9 +3077,18 @@ ${getSourceContext()}
                         } disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 disabled:hover:shadow-sm`}
                         type="button"
                       >
-                        <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${tool.tone}`}>
-                          <Icon size={16} />
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${tool.tone}`}>
+                            <Icon size={16} />
+                          </span>
+                          <span
+                            className={`rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ${
+                              toolCost === 0 ? "bg-emerald-100 text-emerald-700" : "bg-indigo-100 text-indigo-700"
+                            }`}
+                          >
+                            {toolCost === 0 ? "Free" : `${toolCost}c`}
+                          </span>
+                        </div>
                         <span className="text-xs font-semibold text-slate-700">{tool.label}</span>
                         <span className="text-[11px] text-slate-500">{tool.desc}</span>
                       </button>
