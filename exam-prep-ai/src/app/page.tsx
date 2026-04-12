@@ -1959,7 +1959,7 @@ ${getSourceContext()}
     const chatCollapsedDesktop = !isCompactWorkspace && isChatCollapsed;
 
     return (
-      <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-visible p-3 md:p-4 lg:flex-row lg:overflow-hidden">
+      <div className="flex h-full min-w-0 flex-1 flex-col gap-3 overflow-visible p-3 pb-24 md:p-4 md:pb-4 lg:flex-row lg:overflow-hidden">
         {isCompactWorkspace ? (
           <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200/80 bg-gradient-to-b from-white to-slate-50 p-2 shadow-sm">
             <button
@@ -2003,8 +2003,8 @@ ${getSourceContext()}
 
         {showMainShell ? (
           <section
-            className={`relative m-0 flex min-w-0 flex-1 flex-col rounded-2xl border border-slate-100 bg-white shadow-sm ${
-              isCompactWorkspace ? "min-h-[calc(100dvh-230px)] overflow-hidden" : "overflow-hidden"
+            className={`relative m-0 flex h-full min-w-0 flex-1 flex-col rounded-2xl border border-slate-100 bg-white shadow-sm ${
+              isCompactWorkspace ? "min-h-0 overflow-hidden" : "overflow-hidden"
             }`}
           >
             <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3 md:px-6 md:py-4">
@@ -2180,7 +2180,7 @@ ${getSourceContext()}
                     </div>
                   ) : null}
 
-                  <div className="min-h-[220px] max-h-[36dvh] overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/70 p-4 xl:h-[calc(100vh-292px)] xl:max-h-none">
+                  <div className="min-h-[180px] max-h-[30dvh] overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/70 p-4 xl:h-[calc(100vh-292px)] xl:max-h-none">
                     <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
                       <BookOpen size={16} /> Source View {activeSource ? `- ${sourceRoleLabel[activeSource.role]}` : ""}
                     </h2>
@@ -2230,8 +2230,8 @@ ${getSourceContext()}
                         : "min-h-[260px] max-h-[48dvh] pb-4 lg:h-[calc(100vh-260px)] lg:max-h-none lg:pb-24"
                     }`}
                   >
-                    {workspaceMessages.length === 0 ? (
-                      <div className="rounded-xl border border-dashed border-slate-200 p-5 text-sm text-slate-400">
+                      {workspaceMessages.length === 0 ? (
+                        <div className="rounded-xl border border-dashed border-slate-200 p-5 text-sm text-slate-400 md:mt-1">
                         Ask Exam AI to generate questions, answer keys, or revision drills.
                       </div>
                     ) : (
@@ -2264,7 +2264,7 @@ ${getSourceContext()}
                     {workspaceIsLoading && <p className="animate-pulse text-sm text-indigo-500">Generating...</p>}
                   </div>
                   <div
-                    className={`pointer-events-none mt-3 ${
+                    className={`pointer-events-none mt-2 ${
                       isCompactWorkspace
                         ? "sticky bottom-0 z-10 bg-gradient-to-t from-white via-white/95 to-transparent pt-3"
                         : "md:absolute md:right-6 md:bottom-6 md:left-6 md:mt-0"
@@ -2996,7 +2996,7 @@ ${getSourceContext()}
   }
 
   return (
-    <main className={`${bodyFont.className} app-ui-chrome flex min-h-dvh w-full flex-col bg-slate-50 text-slate-800 md:h-dvh md:flex-row md:overflow-hidden`}>
+    <main className={`${bodyFont.className} app-ui-chrome flex h-dvh w-full flex-col overflow-hidden bg-slate-50 text-slate-800 md:flex-row`}>
       <nav className="z-10 hidden h-full w-16 flex-shrink-0 border-r border-slate-100 bg-white py-6 md:flex md:flex-col md:items-center">
         <div className="mb-8 flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500 text-sm font-bold text-white">
           E
