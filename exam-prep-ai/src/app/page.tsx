@@ -683,6 +683,23 @@ export default function Home() {
   const hasHydratedWorkspace = useRef(false);
   const [workspaceReadyToSave, setWorkspaceReadyToSave] = useState(false);
 
+  const buildLearnerProfileContext = () => {
+    const safeName = learnerName.trim() || "Scholar";
+    const safeSubject = focusSubject.trim() || "General";
+    const safeMission = dailyMission.trim() || "Complete one focused study task.";
+    const safeExamDate = examDateInput.trim() || "Not set";
+
+    return [
+      `- Name: ${safeName}`,
+      `- Focus Subject: ${safeSubject}`,
+      `- Exam Date: ${safeExamDate}`,
+      `- Current Streak: ${streakDays} days`,
+      `- Daily Mission: ${safeMission}`,
+      "- Tone Preference: supportive examiner-coach, concise first, expand on request",
+      "- Formatting Preference: short bullets for complex outputs; plain short answer for simple queries",
+    ].join("\n");
+  };
+
   useEffect(() => {
     if (!session?.user?.name || hasHydratedWorkspace.current) {
       return;
@@ -1253,6 +1270,9 @@ ${getSourceContext()}
     const prompt = `
 You are analyzing a history exam paper.
 
+  Learner profile:
+  ${buildLearnerProfileContext()}
+
 Task:
 - Extract only DBQ/source-based questions, maps, and cartoon analysis prompts.
 - Ignore unrelated sections and administrative text.
@@ -1283,6 +1303,9 @@ ${getSourceContext()}
     setActiveTool("grade-answer");
     const prompt = `
 You are an exam marker.
+
+  Learner profile:
+  ${buildLearnerProfileContext()}
 
 Task:
 - Grade the student's answer against the most relevant question from the source material.
@@ -1427,6 +1450,14 @@ ${getSourceContext()}
   };
 
   const requestToolOutput = async (prompt: string) => {
+    const personalizedPrompt = `
+Learner profile:
+${buildLearnerProfileContext()}
+
+Task prompt:
+${prompt}
+`.trim();
+
     const response = await fetch("/api/chat-panel", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -1435,7 +1466,7 @@ ${getSourceContext()}
           {
             id: `tool-${Date.now()}`,
             role: "user",
-            parts: [{ type: "text", text: prompt }],
+            parts: [{ type: "text", text: personalizedPrompt }],
           },
         ],
       }),
@@ -1727,6 +1758,9 @@ Use only the uploaded source context below to answer.
 - If information is not present, say: "Not found in uploaded source."
 - Do not use outside facts.
 - Cite section/question labels from the source when possible.
+
+  Learner profile:
+  ${buildLearnerProfileContext()}
 
 User question:
 ${prompt}
