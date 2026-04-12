@@ -588,6 +588,18 @@ export default function Home() {
   type TopicPrediction = { topic: string; confidence: "High" | "Medium" | "Low"; evidence: string };
   type TopicPredictorData = { predictions: TopicPrediction[]; rawResponse: string };
   type MockPaperChatMessage = { role: "user" | "assistant"; text: string };
+  type WorkspaceChatArchiveMessage = {
+    id: string;
+    role: "user" | "assistant";
+    text: string;
+  };
+  type WorkspaceChatSection = {
+    id: string;
+    title: string;
+    createdAt: number;
+    updatedAt: number;
+    messages: WorkspaceChatArchiveMessage[];
+  };
   type MockPaperGenerationStage = "idle" | "analyzing" | "template" | "drafting" | "markscheme" | "formatting" | "done";
   type ParseDiagnostics = {
     selectedPass: "primary" | "alternate-mode" | "scan-fallback" | "legacy-gpt4o" | null;
@@ -625,6 +637,8 @@ export default function Home() {
     timedSectionName: string;
     timedMinutes: number;
     showTemplateUnderlay: boolean;
+    workspaceChatSections: WorkspaceChatSection[];
+    activeWorkspaceChatId: string;
   };
   type PersistedWorkspace = {
     sourceLibrary: SourceItem[];
@@ -635,12 +649,24 @@ export default function Home() {
   };
 
   const getWorkspaceLocalStorageKey = (userId: string) => `${WORKSPACE_LOCAL_STORAGE_KEY_PREFIX}:${userId}`;
+  const createDefaultWorkspaceSection = (): WorkspaceChatSection => ({
+    id: "workspace-chat-1",
+    title: "Chat 1",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+    messages: [],
+  });
+
+  const [workspaceChatSections, setWorkspaceChatSections] = useState<WorkspaceChatSection[]>([createDefaultWorkspaceSection()]);
+  const [activeWorkspaceChatId, setActiveWorkspaceChatId] = useState("workspace-chat-1");
+  const [showWorkspaceChatHistory, setShowWorkspaceChatHistory] = useState(false);
 
   const {
     messages: workspaceMessages,
     sendMessage: sendWorkspaceMessage,
     status: workspaceStatus,
-  } = useChat({ id: "workspace-chat", experimental_throttle: 24 });
+    setMessages: setWorkspaceMessages,
+  } = useChat({ id: activeWorkspaceChatId, experimental_throttle: 24 });
   const {
     messages: gradingMessages,
     sendMessage: sendGradingMessage,
@@ -955,6 +981,36 @@ export default function Home() {
         if (typeof workspace.drafts.timedSectionName === "string") setTimedSectionName(workspace.drafts.timedSectionName);
         if (typeof workspace.drafts.timedMinutes === "number") setTimedMinutes(Math.max(1, workspace.drafts.timedMinutes));
         if (typeof workspace.drafts.showTemplateUnderlay === "boolean") setShowTemplateUnderlay(workspace.drafts.showTemplateUnderlay);
+          if (Array.isArray(workspace.drafts.workspaceChatSections)) {
+            const validSections = workspace.drafts.workspaceChatSections
+              .filter(
+                (section): section is WorkspaceChatSection =>
+                  typeof section?.id === "string" &&
+                  typeof section.title === "string" &&
+                  typeof section.createdAt === "number" &&
+                  typeof section.updatedAt === "number" &&
+                  Array.isArray(section.messages),
+              )
+              .map((section) => ({
+                ...section,
+                messages: section.messages
+                  .filter(
+                    (message): message is WorkspaceChatArchiveMessage =>
+                      typeof message?.id === "string" &&
+                      (message.role === "user" || message.role === "assistant") &&
+                      typeof message.text === "string",
+                  )
+                  .slice(-80),
+              }));
+
+            if (validSections.length > 0) {
+              setWorkspaceChatSections(validSections);
+            }
+          }
+
+          if (typeof workspace.drafts.activeWorkspaceChatId === "string") {
+            setActiveWorkspaceChatId(workspace.drafts.activeWorkspaceChatId);
+          }
       }
     };
 
@@ -1030,6 +1086,8 @@ export default function Home() {
         timedSectionName,
         timedMinutes,
         showTemplateUnderlay,
+        workspaceChatSections,
+        activeWorkspaceChatId,
       },
     };
 
@@ -1102,6 +1160,8 @@ export default function Home() {
     timedSectionName,
     timedMinutes,
     showTemplateUnderlay,
+    workspaceChatSections,
+    activeWorkspaceChatId,
   ]);
 
   const getGreeting = () => {
@@ -1402,6 +1462,77 @@ export default function Home() {
       .filter((part) => part.type === "text")
       .map((part) => part.text ?? "")
       .join("\n");
+
+  const toArchivedWorkspaceMessages = (messages: Array<{ id: string; role: string; parts: Array<{ type: string; text?: string }> }>) =>
+    messages
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .map((message) => ({
+        id: message.id,
+        role: message.role as "user" | "assistant",
+        text: getMessageText(message),
+      }));
+
+  const toUiWorkspaceMessages = (messages: WorkspaceChatArchiveMessage[]) =>
+    messages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      parts: [{ type: "text" as const, text: message.text }],
+    }));
+
+  useEffect(() => {
+    if (!activeWorkspaceChatId) {
+      return;
+    }
+
+    if (!workspaceChatSections.some((section) => section.id === activeWorkspaceChatId)) {
+      const fallbackId = workspaceChatSections[0]?.id;
+      if (fallbackId) {
+        setActiveWorkspaceChatId(fallbackId);
+      }
+    }
+  }, [activeWorkspaceChatId, workspaceChatSections]);
+
+  useEffect(() => {
+    const activeSection = workspaceChatSections.find((section) => section.id === activeWorkspaceChatId);
+    if (!activeSection) {
+      return;
+    }
+
+    setWorkspaceMessages(toUiWorkspaceMessages(activeSection.messages));
+    // Only run when switching chat sections to avoid message hydration loops.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeWorkspaceChatId]);
+
+  useEffect(() => {
+    if (!activeWorkspaceChatId) {
+      return;
+    }
+
+    const archived = toArchivedWorkspaceMessages(workspaceMessages as Array<{ id: string; role: string; parts: Array<{ type: string; text?: string }> }>);
+
+    setWorkspaceChatSections((previous) =>
+      previous.map((section) => {
+        if (section.id !== activeWorkspaceChatId) {
+          return section;
+        }
+
+        const hasSameMessageCount = section.messages.length === archived.length;
+        const hasSameMessageText =
+          hasSameMessageCount &&
+          section.messages.every((message, index) => message.role === archived[index]?.role && message.text === archived[index]?.text);
+
+        if (hasSameMessageText) {
+          return section;
+        }
+
+        return {
+          ...section,
+          messages: archived,
+          updatedAt: Date.now(),
+        };
+      }),
+    );
+  }, [workspaceMessages, activeWorkspaceChatId]);
 
   const getWorkspaceDisplayText = (text: string, role: string) => {
     if (role !== "user") {
@@ -2560,6 +2691,37 @@ ${getSourceContext()}
     setGradingAnswer("");
   };
 
+  const generateWorkspaceChatTitle = (question: string) => {
+    const cleaned = question.replace(/\s+/g, " ").trim();
+    if (!cleaned) {
+      return "New Chat";
+    }
+
+    const words = cleaned.split(" ").slice(0, 6);
+    return words.join(" ");
+  };
+
+  const startNewWorkspaceChat = () => {
+    const nextIndex = workspaceChatSections.length + 1;
+    const newSection: WorkspaceChatSection = {
+      id: `workspace-chat-${Date.now()}`,
+      title: `Chat ${nextIndex}`,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+      messages: [],
+    };
+
+    setWorkspaceChatSections((previous) => [newSection, ...previous]);
+    setActiveWorkspaceChatId(newSection.id);
+    setWorkspaceMessages([]);
+    setShowWorkspaceChatHistory(false);
+  };
+
+  const openWorkspaceChatSection = (sectionId: string) => {
+    setActiveWorkspaceChatId(sectionId);
+    setShowWorkspaceChatHistory(false);
+  };
+
   const hardSaveWorkspace = async () => {
     if (!isAuthenticated || !workspaceReadyToSave || !hasHydratedWorkspace.current) {
       return;
@@ -2586,6 +2748,8 @@ ${getSourceContext()}
         timedSectionName,
         timedMinutes,
         showTemplateUnderlay,
+        workspaceChatSections,
+        activeWorkspaceChatId,
       },
     };
 
@@ -2651,6 +2815,26 @@ ${getSourceContext()}
     if (!prompt || workspaceIsLoading || !requireSource("workspace")) {
       return;
     }
+
+    setWorkspaceChatSections((previous) =>
+      previous.map((section) => {
+        if (section.id !== activeWorkspaceChatId) {
+          return section;
+        }
+
+        const hasUserMessage = section.messages.some((message) => message.role === "user");
+        const isDefaultTitle = /^Chat\s+\d+$/i.test(section.title) || section.title === "New Chat";
+        if (hasUserMessage || !isDefaultTitle) {
+          return section;
+        }
+
+        return {
+          ...section,
+          title: generateWorkspaceChatTitle(prompt),
+          updatedAt: Date.now(),
+        };
+      }),
+    );
 
     const charged = await deductCredits(TOOL_CREDIT_COSTS.examChat, "Exam AI Chat");
     if (!charged) {
@@ -3312,18 +3496,68 @@ ${getSourceContext()}
               ) : showChatPane ? (
                 <div className="relative flex min-h-0 flex-col px-4 py-4 md:px-6 md:py-5">
                   <h2 className="mb-3 flex items-center justify-between gap-2 text-sm font-semibold text-slate-600">
-                    <span>Exam AI Chat</span>
-                    {!isCompactWorkspace ? (
+                    <span>
+                      Exam AI Chat{workspaceChatSections.find((section) => section.id === activeWorkspaceChatId)?.title ? ` - ${workspaceChatSections.find((section) => section.id === activeWorkspaceChatId)?.title}` : ""}
+                    </span>
+                    <div className="flex items-center gap-1.5">
                       <button
                         type="button"
-                        onClick={() => setIsChatCollapsed(true)}
-                        className="hidden items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 xl:inline-flex"
-                        aria-label="Minimize chat panel"
+                        onClick={startNewWorkspaceChat}
+                        className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
                       >
-                        Minimize <ChevronRight size={14} />
+                        <Plus size={12} /> New Chat
                       </button>
-                    ) : null}
+                      <button
+                        type="button"
+                        onClick={() => setShowWorkspaceChatHistory((showing) => !showing)}
+                        className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50"
+                      >
+                        History
+                      </button>
+                      {!isCompactWorkspace ? (
+                        <button
+                          type="button"
+                          onClick={() => setIsChatCollapsed(true)}
+                          className="hidden items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 xl:inline-flex"
+                          aria-label="Minimize chat panel"
+                        >
+                          Minimize <ChevronRight size={14} />
+                        </button>
+                      ) : null}
+                    </div>
                   </h2>
+                  {showWorkspaceChatHistory ? (
+                    <div className="mb-3 max-h-40 overflow-y-auto rounded-xl border border-slate-200 bg-slate-50 p-2">
+                      <div className="mb-2 flex items-center justify-between px-1">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-slate-500">Chat Sections</p>
+                      </div>
+                      <div className="space-y-1">
+                        {workspaceChatSections
+                          .slice()
+                          .sort((left, right) => right.updatedAt - left.updatedAt)
+                          .map((section) => {
+                            const latestLine = section.messages[section.messages.length - 1]?.text?.split("\n")[0] ?? "No messages yet";
+                            const isActiveSection = section.id === activeWorkspaceChatId;
+
+                            return (
+                              <button
+                                key={section.id}
+                                type="button"
+                                onClick={() => openWorkspaceChatSection(section.id)}
+                                className={`w-full rounded-lg border px-2.5 py-2 text-left transition ${
+                                  isActiveSection
+                                    ? "border-indigo-200 bg-indigo-50"
+                                    : "border-slate-200 bg-white hover:bg-slate-50"
+                                }`}
+                              >
+                                <p className="truncate text-xs font-semibold text-slate-700">{section.title}</p>
+                                <p className="truncate text-[11px] text-slate-500">{latestLine}</p>
+                              </button>
+                            );
+                          })}
+                      </div>
+                    </div>
+                  ) : null}
                   <div
                     className={`overflow-y-auto ${
                       isCompactWorkspace
