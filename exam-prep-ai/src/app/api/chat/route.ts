@@ -34,6 +34,55 @@ const buildChatPanelPolicy = (userName: string) =>
     "When helpful, end with a short checklist the user can act on immediately.",
   ].join(" ");
 
+const trimGroundedUserText = (text: string, keepSourceContext: boolean) => {
+  if (keepSourceContext) {
+    return text;
+  }
+
+  const questionMatch = text.match(/User question:\s*([\s\S]*?)\n\nUploaded source context:/i);
+  if (questionMatch?.[1]) {
+    return questionMatch[1].trim();
+  }
+
+  return text
+    .replace(/\n*Uploaded source context:[\s\S]*$/i, "")
+    .replace(/\n*Learner profile:[\s\S]*$/i, "")
+    .trim();
+};
+
+const compactChatMessages = (messages: UIMessage[]) => {
+  const recent = messages.slice(-10);
+  const latestUserIndex = (() => {
+    for (let index = recent.length - 1; index >= 0; index -= 1) {
+      if (recent[index].role === "user") {
+        return index;
+      }
+    }
+    return -1;
+  })();
+
+  return recent.map((message, index) => {
+    if (message.role !== "user") {
+      return message;
+    }
+
+    const keepSourceContext = index === latestUserIndex;
+    return {
+      ...message,
+      parts: message.parts.map((part) => {
+        if (part.type !== "text") {
+          return part;
+        }
+
+        return {
+          ...part,
+          text: trimGroundedUserText(part.text ?? "", keepSourceContext),
+        };
+      }),
+    };
+  });
+};
+
 export async function POST(req: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.email) {
@@ -43,7 +92,8 @@ export async function POST(req: Request) {
   const userName = session.user.name?.trim() || "the learner";
 
   const { messages } = (await req.json()) as { messages: UIMessage[] };
-  const modelMessages = await convertToModelMessages(messages);
+  const compactMessages = compactChatMessages(messages);
+  const modelMessages = await convertToModelMessages(compactMessages);
 
   const result = await streamText({
     model: openrouter("openrouter/auto"),
