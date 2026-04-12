@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useReducer, useRef, useState, FormEvent, ReactNode } from "react";
 import { useChat } from "@ai-sdk/react";
 import { signIn, signOut, useSession } from "next-auth/react";
-import { useSearchParams } from "next/navigation";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { IBM_Plex_Sans, Sora } from "next/font/google";
@@ -670,7 +669,6 @@ export default function Home() {
   ];
   const [motivationIndex, setMotivationIndex] = useState(() => new Date().getDate() % motivationLines.length);
   const { data: session, status: authStatus } = useSession();
-  const searchParams = useSearchParams();
   const isAuthenticated = authStatus === "authenticated";
   const isAuthLoading = authStatus === "loading";
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
@@ -690,7 +688,12 @@ export default function Home() {
   }, [session?.user?.name]);
 
   useEffect(() => {
-    const rawError = searchParams.get("authError") || searchParams.get("error");
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const params = new URLSearchParams(window.location.search);
+    const rawError = params.get("authError") || params.get("error");
     if (!rawError) {
       return;
     }
@@ -706,7 +709,7 @@ export default function Home() {
     }
 
     setAuthError("Google sign-in failed. Please try again.");
-  }, [searchParams]);
+  }, []);
 
   useEffect(() => {
     if (!isAuthenticated || !session?.user?.id) {
