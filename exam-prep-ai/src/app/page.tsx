@@ -26,6 +26,7 @@ import {
   LogOut,
   PencilLine,
   Paperclip,
+  Plus,
   ShieldCheck,
   SlidersHorizontal,
   Settings,
@@ -797,11 +798,10 @@ export default function Home() {
             )
           : [];
 
-        const fallbackSource = nextSources[nextSources.length - 1];
         const persistedActiveId =
           typeof workspace.activeSourceId === "string" && nextSources.some((item) => item.id === workspace.activeSourceId)
             ? workspace.activeSourceId
-            : fallbackSource?.id ?? null;
+            : null;
 
         setIsParsing(false);
         setParseDiagnostics(null);
@@ -1032,7 +1032,6 @@ export default function Home() {
       };
 
       setSourceLibrary((previous) => [...previous, newSource]);
-      setActiveSourceId(newSource.id);
       setSourceText(parsedText);
     } catch (error) {
       didFail = true;
@@ -1778,8 +1777,8 @@ Use only the uploaded source context below to answer.
   2) Source Evidence
   3) Key Details
   4) In Short
-- Write each section label on its own line exactly as shown above.
-- In Source Evidence, use bullet points and include citation tags like [1], [2], [3].
+- Write each section label as a standalone bold line (example: **Direct Answer**).
+- In Source Evidence, use bullet points and include citation tags as inline code like \`[1]\`, \`[2]\`, \`[3]\`.
 - Each citation must map to a specific source section/question label from uploaded content.
 - In Key Details, prefer bullet labels such as Immediate Cause, Core Objective, Impact, Significance.
 - Keep wording exam-ready, clear, and specific.
@@ -2027,7 +2026,7 @@ ${getSourceContext()}
     notes: "Notes",
   };
 
-  const activeSource = sourceLibrary.find((item) => item.id === activeSourceId) ?? sourceLibrary[sourceLibrary.length - 1];
+  const activeSource = sourceLibrary.find((item) => item.id === activeSourceId) ?? null;
 
   const setSourceSelected = (id: string, selected: boolean) => {
     setSourceLibrary((previous) => previous.map((item) => (item.id === id ? { ...item, selected } : item)));
@@ -2041,9 +2040,7 @@ ${getSourceContext()}
     setSourceLibrary((previous) => {
       const next = previous.filter((item) => item.id !== id);
       if (activeSourceId === id) {
-        const fallback = next[next.length - 1];
-        setActiveSourceId(fallback?.id ?? null);
-        setSourceText(fallback?.text ?? "");
+        setActiveSourceId(null);
       }
       return next;
     });
@@ -2157,7 +2154,7 @@ ${getSourceContext()}
                       ? "xl:grid-cols-[52px_minmax(0,1fr)]"
                       : chatCollapsedDesktop
                         ? "xl:grid-cols-[minmax(0,1fr)_52px]"
-                        : "xl:grid-cols-2"
+                        : "xl:grid-cols-[minmax(280px,0.36fr)_minmax(0,1fr)]"
               }`}
             >
               {showSourcePane && sourceCollapsedDesktop ? (
@@ -2279,20 +2276,20 @@ ${getSourceContext()}
                     </div>
                   ) : null}
 
-                  <div className="min-h-[180px] max-h-[30dvh] overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/70 p-4 xl:h-[calc(100vh-292px)] xl:max-h-none">
-                    <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
-                      <BookOpen size={16} /> Source View {activeSource ? `- ${sourceRoleLabel[activeSource.role]}` : ""}
-                    </h2>
-                    <div className="app-ui-content prose prose-sm max-w-none text-slate-700">
-                      {(activeSource?.text || sourceText) ? (
-                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeSource?.text || sourceText}</ReactMarkdown>
-                      ) : (
-                        <p className="text-sm italic text-slate-400">
-                          {isParsing ? "Extracting text and tables with LlamaParse..." : "No parsed content yet."}
-                        </p>
-                      )}
+                  {activeSource ? (
+                    <div className="min-h-[180px] max-h-[30dvh] overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/70 p-4 xl:h-[calc(100vh-292px)] xl:max-h-none">
+                      <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
+                        <BookOpen size={16} /> Source View - {sourceRoleLabel[activeSource.role]}
+                      </h2>
+                      <div className="app-ui-content prose prose-sm max-w-none text-slate-700">
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{activeSource.text}</ReactMarkdown>
+                      </div>
                     </div>
-                  </div>
+                  ) : sourceLibrary.length > 0 ? (
+                    <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-4 text-xs text-slate-500">
+                      Select a source from Source Library to open Source View.
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -2343,16 +2340,16 @@ ${getSourceContext()}
                         return (
                           <div key={m.id} className={`flex ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                             <div
-                              className={`max-w-[88%] rounded-2xl px-4 py-3 ${
+                              className={`max-w-[94%] rounded-2xl px-4 py-3 ${
                                 m.role === "user"
-                                  ? "bg-slate-100 text-slate-800"
-                                  : "border border-slate-100 bg-white text-slate-800 shadow-sm"
+                                  ? "bg-orange-500 text-white"
+                                  : "bg-transparent text-slate-800"
                               }`}
                             >
                               {isStreamingAssistantMessage ? (
                                 <pre className="app-ui-content chat-typing-cursor whitespace-pre-wrap break-words text-[15px] leading-7 text-slate-700">{messageText}</pre>
                               ) : (
-                                <div className="app-ui-content prose prose-sm md:prose-base max-w-none prose-slate prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-li:my-1 leading-7">
+                                <div className="memo-response app-ui-content prose prose-sm md:prose-base max-w-none prose-slate prose-headings:mb-2 prose-p:my-2 prose-ul:my-2 prose-li:my-1 prose-code:bg-orange-50 prose-code:text-orange-500 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:font-medium prose-code:before:content-none prose-code:after:content-none leading-7">
                                   <ReactMarkdown remarkPlugins={[remarkGfm]}>{messageText}</ReactMarkdown>
                                 </div>
                               )}
@@ -2383,8 +2380,12 @@ ${getSourceContext()}
                           : "border border-white/50 bg-white/75 shadow-xl"
                       }`}
                     >
-                      <button type="button" className="text-slate-400 transition-colors hover:text-slate-600" aria-label="Attach">
-                        <Paperclip size={20} />
+                      <button
+                        type="button"
+                        className="flex h-8 w-8 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-600"
+                        aria-label="Add"
+                      >
+                        <Plus size={18} />
                       </button>
                       <input
                         type="text"
@@ -2397,7 +2398,7 @@ ${getSourceContext()}
                       <button
                         type="submit"
                         disabled={workspaceIsLoading || !input.trim()}
-                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-indigo-500 text-white transition-colors hover:bg-indigo-600 disabled:bg-slate-300"
+                        className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white transition-colors hover:bg-orange-600 disabled:bg-slate-300"
                         aria-label="Send"
                       >
                         <ArrowUp size={18} strokeWidth={3} />
