@@ -1034,23 +1034,45 @@ export default function Home() {
       return true;
     }
 
-    const response = await fetch("/api/credits", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount, feature, mode: "check" }),
-    });
+    if (userCredits < amount) {
+      setCreditError(`Not enough credits for ${feature}.`);
+      return false;
+    }
 
-    if (response.ok) {
+    try {
+      const response = await fetch("/api/credits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount, feature, mode: "check" }),
+      });
+
+      if (response.ok) {
+        setCreditError(null);
+        return true;
+      }
+
+      const result = (await response.json().catch(() => ({}))) as { error?: string; credits?: number };
+      if (typeof result.credits === "number") {
+        const latestCredits = Math.max(0, Math.floor(result.credits));
+        setUserCredits(latestCredits);
+        if (latestCredits < amount) {
+          setCreditError(result.error || `Not enough credits for ${feature}.`);
+          return false;
+        }
+      }
+
+      if (response.status === 409) {
+        setCreditError(result.error || `Not enough credits for ${feature}.`);
+        return false;
+      }
+
+      // Do not block tool usage on transient credit API failures.
+      setCreditError(null);
+      return true;
+    } catch {
       setCreditError(null);
       return true;
     }
-
-    const result = (await response.json().catch(() => ({}))) as { error?: string; credits?: number };
-    if (typeof result.credits === "number") {
-      setUserCredits(Math.max(0, Math.floor(result.credits)));
-    }
-    setCreditError(result.error || `Not enough credits for ${feature}.`);
-    return false;
   };
 
   const deductCredits = async (amount: number, feature: string) => {
@@ -1058,27 +1080,55 @@ export default function Home() {
       return true;
     }
 
-    const response = await fetch("/api/credits", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount, feature, mode: "consume" }),
-    });
-
-    const result = (await response.json().catch(() => ({}))) as { error?: string; credits?: number };
-
-    if (!response.ok) {
-      if (typeof result.credits === "number") {
-        setUserCredits(Math.max(0, Math.floor(result.credits)));
-      }
-      setCreditError(result.error || `Failed to deduct credits for ${feature}.`);
+    if (userCredits < amount) {
+      setCreditError(`Not enough credits for ${feature}.`);
       return false;
     }
 
-    if (typeof result.credits === "number") {
-      setUserCredits(Math.max(0, Math.floor(result.credits)));
+    const previousCredits = userCredits;
+    const optimisticCredits = Math.max(0, previousCredits - amount);
+    setUserCredits(optimisticCredits);
+
+    try {
+      const response = await fetch("/api/credits", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount, feature, mode: "consume" }),
+      });
+
+      const result = (await response.json().catch(() => ({}))) as { error?: string; credits?: number };
+
+      if (!response.ok) {
+        if (typeof result.credits === "number") {
+          const latestCredits = Math.max(0, Math.floor(result.credits));
+          setUserCredits(latestCredits);
+          if (latestCredits < amount) {
+            setCreditError(result.error || `Not enough credits for ${feature}.`);
+            return false;
+          }
+        }
+
+        if (response.status === 409) {
+          setUserCredits(previousCredits);
+          setCreditError(result.error || `Not enough credits for ${feature}.`);
+          return false;
+        }
+
+        // Keep optimistic deduction when server temporarily fails to respond.
+        setCreditError(null);
+        return true;
+      }
+
+      if (typeof result.credits === "number") {
+        setUserCredits(Math.max(0, Math.floor(result.credits)));
+      }
+      setCreditError(null);
+      return true;
+    } catch {
+      // Keep optimistic deduction on transient network errors.
+      setCreditError(null);
+      return true;
     }
-    setCreditError(null);
-    return true;
   };
 
   const onDrop = async (acceptedFiles: File[]) => {
@@ -2388,6 +2438,12 @@ ${getSourceContext()}
     setAuthError(null);
     setShowCoverPage(true);
     setShowStartupSplash(true);
+  };
+
+  const handleExitToCover = () => {
+    setActiveView("workspace");
+    setShowCoverPage(true);
+    setCoverTransitioning(false);
   };
 
   const handleGoogleSignIn = async () => {
@@ -3926,8 +3982,8 @@ ${getSourceContext()}
         <div className="mt-auto flex flex-col gap-6">
           <button
             className="rounded-xl p-2 text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-700"
-            aria-label="Sign out"
-            onClick={handleSignOut}
+            aria-label="Exit to cover page"
+            onClick={handleExitToCover}
           >
             <LogOut size={20} />
           </button>
@@ -3963,8 +4019,8 @@ ${getSourceContext()}
         </div>
         <button
           className="mt-2 w-full rounded-xl p-2 text-slate-400 transition-all hover:bg-slate-50 hover:text-slate-700"
-          aria-label="Sign out"
-          onClick={handleSignOut}
+          aria-label="Exit to cover page"
+          onClick={handleExitToCover}
         >
           <LogOut size={18} className="mx-auto" />
         </button>
