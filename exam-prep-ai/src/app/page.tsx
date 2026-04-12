@@ -1673,6 +1673,47 @@ export default function Home() {
     return { hasTemplate: true, templateHint: templateLines };
   };
 
+  const getTemplateReplicaBlueprint = () => {
+    const paperText = sourceLibrary
+      .filter((item) => item.selected && item.role === "question-paper")
+      .map((item) => item.text)
+      .join("\n\n");
+    const source = (paperText || getSourceContext()).trim();
+    if (!source) {
+      return { hasBlueprint: false, blueprint: "", pageCount: 0 };
+    }
+
+    const pages = source
+      .split(/\n\s*\[\[PAGE_BREAK\]\]\s*\n/gi)
+      .map((page) => page.trim())
+      .filter(Boolean);
+
+    const lineCandidates = source
+      .split("\n")
+      .map((line) => line.replace(/\s+$/g, ""))
+      .filter((line) => line.trim().length > 0)
+      .filter(
+        (line) =>
+          line === "[[PAGE_BREAK]]" ||
+          /^#{1,6}\s/.test(line) ||
+          /^(Section\s+[A-Z0-9]|Question\s*\d+|Q\d+|Instructions?|Time\s+Allowed|Duration|Total\s+Marks|Answer\s+all|Attempt\s+any)/i.test(
+            line,
+          ) ||
+          /\(\s*\d+\s*marks?\s*\)|\[\s*\d+\s*\]|\.{3,}|_{3,}/i.test(line) ||
+          /\*\*.+\*\*/.test(line) ||
+          /<u>.+<\/u>/i.test(line) ||
+          /==[^=]+==/.test(line),
+      )
+      .slice(0, 260)
+      .join("\n");
+
+    return {
+      hasBlueprint: lineCandidates.trim().length > 0,
+      blueprint: lineCandidates,
+      pageCount: Math.max(1, pages.length),
+    };
+  };
+
   const getMockPaperPages = (content: string) => {
     const parts = content
       .split(/\n\s*\[\[PAGE_BREAK\]\]\s*\n/gi)
@@ -1729,23 +1770,45 @@ export default function Home() {
   };
 
   const normalizeMockPaperOutput = (content: string) => {
-    const normalized = content
-      .replace(/\r\n/g, "\n")
-      .replace(/^#{1,6}\s+/gm, "")
-      .replace(/\*\*(.*?)\*\*/g, "$1")
-      .trim();
+    const normalized = content.replace(/\r\n/g, "\n").trim();
     if (!normalized) {
       return "";
     }
 
-    const pages = normalized
+    const providedPages = normalized
       .split(/\n\s*\[\[PAGE_BREAK\]\]\s*\n/gi)
       .map((page) => page.replace(/\n{3,}/g, "\n\n").trim())
       .filter(Boolean);
 
-    const merged = pages.join("\n\n").trim();
+    if (providedPages.length > 1) {
+      return providedPages.join("\n\n[[PAGE_BREAK]]\n\n");
+    }
+
+    const merged = providedPages.join("\n\n").trim();
     if (!merged) {
       return "";
+    }
+
+    if (strictTemplateReplicaMode) {
+      const templatePageCount = getTemplateReplicaBlueprint().pageCount;
+      if (templatePageCount > 1) {
+        const allLines = merged.split("\n");
+        const chunkSize = Math.max(1, Math.ceil(allLines.length / templatePageCount));
+        const chunkedPages: string[] = [];
+
+        for (let i = 0; i < templatePageCount; i += 1) {
+          const start = i * chunkSize;
+          const end = i === templatePageCount - 1 ? allLines.length : (i + 1) * chunkSize;
+          const chunk = allLines.slice(start, end).join("\n").trim();
+          if (chunk) {
+            chunkedPages.push(chunk);
+          }
+        }
+
+        if (chunkedPages.length > 1) {
+          return chunkedPages.join("\n\n[[PAGE_BREAK]]\n\n");
+        }
+      }
     }
 
     return paginateForA4Output(merged);
@@ -1950,6 +2013,7 @@ export default function Home() {
       : topicPredictorDraft.trim() || "Not available. Ask user to run Topic Predictor for improved targeting.";
 
     const { hasTemplate, templateHint } = getPastPaperTemplateHint();
+    const { hasBlueprint, blueprint, pageCount: templatePageCount } = getTemplateReplicaBlueprint();
 
     const prompt = `
 You are an examiner creating a printable mock exam paper from uploaded sources.
@@ -1957,15 +2021,22 @@ You are an examiner creating a printable mock exam paper from uploaded sources.
 Task:
 - Analyze uploaded past papers and all selected sources to infer exam style, question patterns, wording, and mark allocation.
 - Follow the uploaded past paper template as strictly as possible, including section naming, ordering, numbering style, instruction tone, and marks formatting.
+- Follow the uploaded past paper template EXACTLY, including section naming, ordering, numbering style, instruction tone, marks formatting, spacing rhythm, and emphasis markers.
 - Difficulty mix for this generation: ${difficultyLabel}.
 - If topic predictions are available, prioritize them while preserving realism.
 - Template replica mode: ${strictTemplateReplicaMode ? "STRICT" : "RELAXED"}.
-- If STRICT, treat the template as a copy-layout scaffold: preserve line-order skeleton, heading style, punctuation separators, numbering symbols, section labels, and mark-format tokens. Change only exam content/topic wording.
+- If STRICT, treat the template as a close copy-layout scaffold: preserve line-order skeleton, heading style, punctuation separators, numbering symbols, section labels, and mark-format tokens. Minor structural adjustments are allowed only when needed for coherent content.
 
 ${
   hasTemplate
     ? `Template cues from uploaded past paper (must mirror closely):\n${templateHint}`
     : "Template cues: no clear template extracted. Use standard exam-paper format with clear sections and marks."
+}
+
+${
+  hasBlueprint
+    ? `Template blueprint excerpt (copy structure/style tokens exactly, only vary content):\n${blueprint}`
+    : "Template blueprint excerpt unavailable."
 }
 
 Output requirements (printable template):
@@ -1987,10 +2058,13 @@ Formatting rules:
 - Keep headings clear and printable.
 - Use realistic exam wording and mark distribution.
 - Do not include meta commentary.
-- Preserve punctuation symbols, numbering symbols, and separators reflected in the uploaded template.
+- Preserve punctuation symbols, numbering symbols, separators, and typographic emphasis markers reflected in the uploaded template.
+- Preserve bold using **text**, preserve underlines using <u>text</u>, and preserve highlights using ==text== where present in template cues.
 - Insert page separators using exactly: [[PAGE_BREAK]] between pages.
 - Keep each page length balanced for print readability.
 - When template cues are present, do not invent a new format. Reuse template skeleton and only replace content.
+- Target page count: close to ${templatePageCount > 0 ? templatePageCount : "source template"} when feasible, but allow variation if content quality requires it.
+- If STRICT mode is enabled: keep major headings and section blocks highly similar to source template, but allow minor structural adjustments.
 
 Source document markdown:
 ${getSourceContext()}
@@ -2051,6 +2125,7 @@ ${topicContext}
     ]);
 
     const { hasTemplate, templateHint } = getPastPaperTemplateHint();
+    const { hasBlueprint, blueprint, pageCount: templatePageCount } = getTemplateReplicaBlueprint();
 
     const prompt = `
 You are editing an existing mock exam paper.
@@ -2059,15 +2134,22 @@ Goal:
 - Apply the user's modification request to the mock paper.
 - Preserve printable exam structure and keep mark scheme appendix present.
 - Keep alignment with uploaded past paper template.
-- Preserve punctuation symbols and visual separators used in the current draft/template.
+- Preserve punctuation symbols, visual separators, and typographic emphasis markers used in the current draft/template.
 - Keep page boundaries with [[PAGE_BREAK]] markers.
 - Template replica mode: ${strictTemplateReplicaMode ? "STRICT" : "RELAXED"}.
 - If STRICT, keep the existing layout scaffold untouched (same heading/order/numbering/mark format) and modify only requested content.
+- In STRICT mode, preserve line spacing rhythm, section/page segmentation style, and emphasis markers (bold/underline/highlight) unless user asks to change them.
 
 ${
   hasTemplate
     ? `Template cues from uploaded past paper (must mirror closely):\n${templateHint}`
     : "Template cues unavailable. Preserve current paper structure and formatting."
+}
+
+${
+  hasBlueprint
+    ? `Template blueprint excerpt (copy structure/style tokens exactly, only vary edited content):\n${blueprint}`
+    : "Template blueprint excerpt unavailable."
 }
 
 User edit request:
@@ -2080,6 +2162,7 @@ Source context:
 ${getSourceContext()}
 
 Return ONLY the full updated mock paper in markdown.
+- Keep target page count close to template when feasible, but variation is allowed if needed for coherent content.
 `.trim();
 
     try {
