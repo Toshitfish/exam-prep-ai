@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useReducer, useRef, useState, FormEvent, ReactNode } from "react";
+import { useEffect, useReducer, useRef, useState, FormEvent, ReactNode } from "react";
 import { useChat } from "@ai-sdk/react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import ReactMarkdown from "react-markdown";
@@ -77,6 +77,17 @@ const MIN_WINDOW_WIDTH = 520;
 const MIN_WINDOW_HEIGHT = 340;
 const MOCK_PAPER_A4_WIDTH_PX = 794;
 const MOCK_PAPER_A4_HEIGHT_PX = 1123;
+const TOOL_CREDIT_COSTS = {
+  timedSection: 0,
+  parsePdf: 1,
+  examChat: 1,
+  extractDbq: 2,
+  mockEdit: 2,
+  gradeAnswer: 2,
+  markingRules: 2,
+  topicPredictor: 3,
+  generateMockPaper: 3,
+} as const;
 
 const getWindowViewportBounds = (win: FloatingWindowState) => {
   if (typeof window === "undefined") {
@@ -319,6 +330,7 @@ const DraggableWindow = ({
 
 export default function Home() {
   type AppView = "workspace" | "vault" | "analytics" | "syllabus" | "purchase";
+  type MarketplacePanel = "store" | "usage";
   type CoverEditableField = "learnerName" | "examDate" | "focusSubject" | "streakDays" | "dailyMission";
   type WindowId = "answer-key" | "grade-answer" | "marking-rules" | "topic-predictor" | "timed-section";
   type DesktopWindow = {
@@ -696,6 +708,9 @@ export default function Home() {
   const [authEmailInput, setAuthEmailInput] = useState("");
   const [authPasswordInput, setAuthPasswordInput] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
+  const [userCredits, setUserCredits] = useState(20);
+  const [creditError, setCreditError] = useState<string | null>(null);
+  const [marketplacePanel, setMarketplacePanel] = useState<MarketplacePanel>("store");
   const hasHydratedWorkspace = useRef(false);
   const [workspaceReadyToSave, setWorkspaceReadyToSave] = useState(false);
   const [animatedWorkspaceText, setAnimatedWorkspaceText] = useState("");
@@ -727,6 +742,32 @@ export default function Home() {
 
     setLearnerName(session.user.name);
   }, [session?.user?.name]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !session?.user?.id) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const loadCredits = async () => {
+      const response = await fetch("/api/credits", { method: "GET" });
+      if (!response.ok) {
+        return;
+      }
+
+      const result = (await response.json()) as { credits?: number };
+      if (!cancelled && typeof result.credits === "number") {
+        setUserCredits(Math.max(0, Math.floor(result.credits)));
+      }
+    };
+
+    void loadCredits();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, session?.user?.id]);
 
   useEffect(() => {
     sourcePdfUrlsRef.current = sourcePdfUrls;
@@ -970,7 +1011,59 @@ export default function Home() {
     day: "numeric",
   });
 
-  const onDrop = useCallback(async (acceptedFiles: File[]) => {
+  const checkCreditsEnough = async (amount: number, feature: string) => {
+    if (amount <= 0) {
+      return true;
+    }
+
+    const response = await fetch("/api/credits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount, feature, mode: "check" }),
+    });
+
+    if (response.ok) {
+      setCreditError(null);
+      return true;
+    }
+
+    const result = (await response.json().catch(() => ({}))) as { error?: string; credits?: number };
+    if (typeof result.credits === "number") {
+      setUserCredits(Math.max(0, Math.floor(result.credits)));
+    }
+    setCreditError(result.error || `Not enough credits for ${feature}.`);
+    return false;
+  };
+
+  const deductCredits = async (amount: number, feature: string) => {
+    if (amount <= 0) {
+      return true;
+    }
+
+    const response = await fetch("/api/credits", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ amount, feature, mode: "consume" }),
+    });
+
+    const result = (await response.json().catch(() => ({}))) as { error?: string; credits?: number };
+
+    if (!response.ok) {
+      if (typeof result.credits === "number") {
+        setUserCredits(Math.max(0, Math.floor(result.credits)));
+      }
+      setCreditError(result.error || `Failed to deduct credits for ${feature}.`);
+      return false;
+    }
+
+    if (typeof result.credits === "number") {
+      setUserCredits(Math.max(0, Math.floor(result.credits)));
+    }
+    setCreditError(null);
+    return true;
+  };
+
+  const onDrop = async (acceptedFiles: File[]) => {
     const inferSourceRole = (name: string): SourceRole => {
       const lowerName = name.toLowerCase();
       if (/(mark\s*scheme|marking\s*scheme|rubric|grading)/.test(lowerName)) {
@@ -987,6 +1080,11 @@ export default function Home() {
 
     const file = acceptedFiles[0];
     if (!file) {
+      return;
+    }
+
+    const allowed = await checkCreditsEnough(TOOL_CREDIT_COSTS.parsePdf, "Upload + Parse PDF");
+    if (!allowed) {
       return;
     }
 
@@ -1080,6 +1178,7 @@ export default function Home() {
       setSourceLibrary((previous) => [...previous, newSource]);
       setSourcePdfUrls((previous) => ({ ...previous, [newSource.id]: pdfUrl }));
       setSourceText(parsedText);
+      await deductCredits(TOOL_CREDIT_COSTS.parsePdf, "Upload + Parse PDF");
     } catch (error) {
       didFail = true;
       const message = error instanceof Error ? error.message : "Unknown parsing error.";
@@ -1096,7 +1195,7 @@ export default function Home() {
         setParseStage("idle");
       }, didFail ? 1600 : 900);
     }
-  }, []);
+  };
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
@@ -1409,6 +1508,11 @@ export default function Home() {
       return;
     }
 
+    const allowed = await checkCreditsEnough(TOOL_CREDIT_COSTS.generateMockPaper, "Generate Mock Paper");
+    if (!allowed) {
+      return;
+    }
+
     const selectedDifficulty = difficultyOverride ?? mockPaperDifficulty;
     if (difficultyOverride && difficultyOverride !== mockPaperDifficulty) {
       setMockPaperDifficulty(difficultyOverride);
@@ -1497,6 +1601,10 @@ ${topicContext}
       setAnswerKeyOutput(responseText || "No mock paper generated.");
       setIsEditingAnswerKeyOutput(false);
       setMockPaperGenerationStage("done");
+      const charged = await deductCredits(TOOL_CREDIT_COSTS.generateMockPaper, "Generate Mock Paper");
+      if (!charged) {
+        setMockPaperNotice("Generation completed, but credit deduction failed. Please refresh and try again.");
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to generate mock paper.";
       setAnswerKeyError(message);
@@ -1517,6 +1625,12 @@ ${topicContext}
 
     if (!answerKeyOutput.trim()) {
       setMockPaperChatError("Generate a mock paper first, then request edits here.");
+      return;
+    }
+
+    const allowed = await checkCreditsEnough(TOOL_CREDIT_COSTS.mockEdit, "AI Mock Edit");
+    if (!allowed) {
+      setMockPaperChatError("Not enough credits for AI Mock Edit.");
       return;
     }
 
@@ -1561,6 +1675,10 @@ Return ONLY the full updated mock paper in markdown.
       const updatedPaper = await requestToolOutput(prompt);
       setAnswerKeyOutput(updatedPaper || answerKeyOutput);
       setMockPaperChatMessages((previous) => [...previous, { role: "assistant", text: "Applied. Mock paper updated." }]);
+      const charged = await deductCredits(TOOL_CREDIT_COSTS.mockEdit, "AI Mock Edit");
+      if (!charged) {
+        setMockPaperChatError("Edit applied, but credit deduction failed. Please refresh and check balance.");
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to apply mock paper edit.";
       setMockPaperChatError(message);
@@ -1594,8 +1712,13 @@ Return ONLY the full updated mock paper in markdown.
     openWindow("answer-key");
   };
 
-  const runExtractDbqs = () => {
+  const runExtractDbqs = async () => {
     if (!requireSource("workspace") || workspaceIsLoading) {
+      return;
+    }
+
+    const charged = await deductCredits(TOOL_CREDIT_COSTS.extractDbq, "Extract DBQs / Sources");
+    if (!charged) {
       return;
     }
 
@@ -1623,13 +1746,18 @@ ${getSourceContext()}
     sendWorkspaceMessage({ text: prompt });
   };
 
-  const runGradeAnswer = () => {
+  const runGradeAnswer = async () => {
     if (!requireSource("grading") || gradingIsLoading) {
       return;
     }
 
     const answer = gradingAnswer.trim();
     if (!answer) {
+      return;
+    }
+
+    const charged = await deductCredits(TOOL_CREDIT_COSTS.gradeAnswer, "Grade My Answer");
+    if (!charged) {
       return;
     }
 
@@ -1861,6 +1989,11 @@ ${prompt}
       return;
     }
 
+    const allowed = await checkCreditsEnough(TOOL_CREDIT_COSTS.markingRules, "Marking Rules");
+    if (!allowed) {
+      return;
+    }
+
     setActiveTool("marking-rules");
     setMarkingRulesLoading(true);
     setMarkingRulesError(null);
@@ -1885,6 +2018,7 @@ ${getSourceContext()}
       setMarkingRulesData(parsed);
       setMarkingRulesDraft(parsed.rawResponse);
       setIsEditingMarkingRulesDraft(false);
+      await deductCredits(TOOL_CREDIT_COSTS.markingRules, "Marking Rules");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to generate marking rules.";
       setMarkingRulesError(message);
@@ -1895,6 +2029,11 @@ ${getSourceContext()}
 
   const generateTopicPredictions = async () => {
     if (!requireSource("workspace") || topicPredictorLoading) {
+      return;
+    }
+
+    const allowed = await checkCreditsEnough(TOOL_CREDIT_COSTS.topicPredictor, "Topic Predictor");
+    if (!allowed) {
       return;
     }
 
@@ -1915,6 +2054,7 @@ ${getSourceContext()}
       setTopicPredictorData(parsed);
       setTopicPredictorDraft(parsed.rawResponse);
       setIsEditingTopicPredictorDraft(false);
+      await deductCredits(TOOL_CREDIT_COSTS.topicPredictor, "Topic Predictor");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to generate topic predictions.";
       setTopicPredictorError(message);
@@ -2082,11 +2222,16 @@ ${getSourceContext()}
     setIsParsing(false);
   };
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     const prompt = input.trim();
 
     if (!prompt || workspaceIsLoading || !requireSource("workspace")) {
+      return;
+    }
+
+    const charged = await deductCredits(TOOL_CREDIT_COSTS.examChat, "Exam AI Chat");
+    if (!charged) {
       return;
     }
 
@@ -2243,6 +2388,9 @@ ${getSourceContext()}
   const latestWorkspaceAssistantText = latestWorkspaceAssistantMessage ? getMessageText(latestWorkspaceAssistantMessage) : "";
   const scoreSourceText = (gradingFeedbackDraft || latestAssistantFeedback).trim();
   const scoreMatch = scoreSourceText.match(/(\d+)\s*\/\s*(\d+)/);
+  const FREE_TRIAL_CREDIT_LIMIT = 20;
+  const cappedCredits = Math.max(0, Math.min(userCredits, FREE_TRIAL_CREDIT_LIMIT));
+  const creditBarPercent = (cappedCredits / FREE_TRIAL_CREDIT_LIMIT) * 100;
 
   useEffect(() => {
     if (latestWorkspaceAssistantId === lastAnimatedAssistantId.current) {
@@ -3019,55 +3167,137 @@ ${getSourceContext()}
   const renderPurchaseView = () => (
     <div className="flex min-w-0 flex-1 overflow-visible p-3 md:overflow-hidden md:p-4">
       <section className="flex min-w-0 flex-1 flex-col rounded-2xl border border-slate-100 bg-white p-6 shadow-sm">
-        <h1 className="mb-1 text-xl font-semibold text-slate-800">Credit Store</h1>
-        <p className="mb-6 text-sm text-slate-500">Choose a one-time credit pack. No subscription required.</p>
-
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
-          <article className="relative rounded-2xl border-2 border-indigo-300 bg-gradient-to-b from-indigo-50 to-white p-5 shadow-sm">
-            <span className="absolute -top-3 right-4 rounded-full bg-indigo-600 px-3 py-1 text-[11px] font-semibold text-white">
-              Most Popular
-            </span>
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-indigo-600">Starter Pack</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-900">USD 4.99</p>
-            <p className="mt-1 text-sm text-slate-600">500 credits</p>
-            <div className="mt-4 rounded-lg border border-indigo-100 bg-white p-3 text-sm text-slate-700">
-              First purchase bonus: <span className="font-semibold text-indigo-700">1.5x credits</span>
-              <p className="mt-1 text-xs text-slate-500">You receive 750 credits on your first purchase.</p>
-            </div>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="mb-1 text-xl font-semibold text-slate-800">Marketplace</h1>
+            <p className="text-sm text-slate-500">Top up credits and understand exactly how each feature spends them.</p>
+            <p className="mt-1 text-xs font-semibold text-emerald-700">Current balance: {userCredits} credits</p>
+          </div>
+          <div className="inline-flex rounded-xl border border-slate-200 bg-slate-50 p-1">
             <button
               type="button"
-              className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+              onClick={() => setMarketplacePanel("store")}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                marketplacePanel === "store" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-600 hover:bg-white/70"
+              }`}
             >
-              Purchase 500 Credits
+              Credit Store
             </button>
-          </article>
-
-          <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Value Pack</p>
-            <p className="mt-2 text-3xl font-semibold text-slate-900">USD 8.99</p>
-            <p className="mt-1 text-sm text-slate-600">1000 credits</p>
-            <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
-              First purchase bonus: <span className="font-semibold text-indigo-700">1.5x credits</span>
-              <p className="mt-1 text-xs text-slate-500">You receive 1500 credits on your first purchase.</p>
-            </div>
             <button
               type="button"
-              className="mt-5 inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+              onClick={() => setMarketplacePanel("usage")}
+              className={`rounded-lg px-3 py-1.5 text-xs font-semibold transition ${
+                marketplacePanel === "usage" ? "bg-white text-indigo-600 shadow-sm" : "text-slate-600 hover:bg-white/70"
+              }`}
             >
-              Purchase 1000 Credits
+              Usage
             </button>
-          </article>
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.12em] text-slate-600">Credit Policy</h2>
-          <ul className="space-y-2 text-sm text-slate-700">
-            <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">No expiry: credits never expire.</li>
-            <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">No refund: credit purchases are non-refundable.</li>
-            <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">Non-transferable: credits cannot be transferred between accounts.</li>
-            <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">First purchase only: 1.5x bonus applies once per account.</li>
-          </ul>
-        </div>
+        {creditError ? <p className="mb-4 rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700">{creditError}</p> : null}
+
+        {marketplacePanel === "store" ? (
+          <>
+            <p className="mb-6 text-sm text-slate-500">Choose a one-time credit pack. No subscription required.</p>
+
+            <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
+              <article className="relative rounded-2xl border-2 border-indigo-300 bg-gradient-to-b from-indigo-50 to-white p-5 shadow-sm">
+                <span className="absolute -top-3 right-4 rounded-full bg-indigo-600 px-3 py-1 text-[11px] font-semibold text-white">
+                  Most Popular
+                </span>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-indigo-600">Starter Pack</p>
+                <p className="mt-2 text-3xl font-semibold text-slate-900">USD 4.99</p>
+                <p className="mt-1 text-sm text-slate-600">500 credits</p>
+                <div className="mt-4 rounded-lg border border-indigo-100 bg-white p-3 text-sm text-slate-700">
+                  First purchase bonus: <span className="font-semibold text-indigo-700">1.5x credits</span>
+                  <p className="mt-1 text-xs text-slate-500">You receive 750 credits on your first purchase.</p>
+                </div>
+                <button
+                  type="button"
+                  className="mt-5 inline-flex w-full items-center justify-center rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                >
+                  Purchase 500 Credits
+                </button>
+              </article>
+
+              <article className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Value Pack</p>
+                <p className="mt-2 text-3xl font-semibold text-slate-900">USD 8.99</p>
+                <p className="mt-1 text-sm text-slate-600">1000 credits</p>
+                <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700">
+                  First purchase bonus: <span className="font-semibold text-indigo-700">1.5x credits</span>
+                  <p className="mt-1 text-xs text-slate-500">You receive 1500 credits on your first purchase.</p>
+                </div>
+                <button
+                  type="button"
+                  className="mt-5 inline-flex w-full items-center justify-center rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                >
+                  Purchase 1000 Credits
+                </button>
+              </article>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.12em] text-slate-600">Credit Policy</h2>
+              <ul className="space-y-2 text-sm text-slate-700">
+                <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">No expiry: credits never expire.</li>
+                <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">No refund: credit purchases are non-refundable.</li>
+                <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">Non-transferable: credits cannot be transferred between accounts.</li>
+                <li className="rounded-lg border border-slate-200 bg-white px-3 py-2">First purchase only: 1.5x bonus applies once per account.</li>
+              </ul>
+            </div>
+          </>
+        ) : (
+          <>
+            <p className="mb-6 text-sm text-slate-500">Usage Atlas: each action has a clear, predictable credit cost.</p>
+
+            <div className="mb-6 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 via-white to-cyan-50 p-5">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold uppercase tracking-[0.12em] text-emerald-700">Credit Rhythm Guide</h2>
+                <span className="rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                  Transparent Billing
+                </span>
+              </div>
+              <p className="text-sm text-slate-700">Light tasks are 0-1 credits, core AI workflows are 2-3 credits, and timer/focus tools stay free.</p>
+            </div>
+
+            <div className="mb-6 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+              {[
+                { label: "Timed Section", detail: "Start / pause / reset sprint", cost: 0, tone: "emerald" },
+                { label: "Upload + Parse PDF", detail: "Process one source file", cost: 1, tone: "sky" },
+                { label: "Exam AI Chat", detail: "One grounded chat question", cost: 1, tone: "indigo" },
+                { label: "Extract DBQs / Sources", detail: "One extraction run", cost: 2, tone: "violet" },
+                { label: "AI Mock Edit", detail: "One edit instruction applied", cost: 2, tone: "fuchsia" },
+                { label: "Grade My Answer", detail: "One grading + model feedback", cost: 2, tone: "blue" },
+                { label: "Marking Rules", detail: "Generate examiner rule matrix", cost: 2, tone: "cyan" },
+                { label: "Topic Predictor", detail: "Forecast likely upcoming topics", cost: 3, tone: "amber" },
+                { label: "Generate Mock Paper", detail: "Full paper + mark scheme", cost: 3, tone: "rose" },
+              ].map((item) => (
+                <article key={item.label} className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                  <div className="mb-2 flex items-start justify-between gap-3">
+                    <h3 className="text-sm font-semibold text-slate-800">{item.label}</h3>
+                    <span
+                      className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                        item.cost === 0
+                          ? "bg-emerald-100 text-emerald-700"
+                          : item.cost <= 2
+                            ? "bg-sky-100 text-sky-700"
+                            : item.cost <= 4
+                              ? "bg-indigo-100 text-indigo-700"
+                              : "bg-rose-100 text-rose-700"
+                      }`}
+                    >
+                      {item.cost === 0 ? "Free" : `${item.cost} credits`}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-600">{item.detail}</p>
+                </article>
+              ))}
+            </div>
+
+          </>
+        )}
       </section>
     </div>
   );
@@ -3309,6 +3539,24 @@ ${getSourceContext()}
                     </motion.p>
                   </AnimatePresence>
                 </div>
+              </div>
+
+              <div className="mb-6 rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4">
+                <div className="mb-2 flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-emerald-700">Credits</p>
+                  <span className="rounded-full border border-emerald-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-emerald-700">
+                    Free Trial
+                  </span>
+                </div>
+                <div className="mb-2 h-2.5 w-full overflow-hidden rounded-full bg-emerald-100">
+                  <div
+                    className="h-full rounded-full bg-emerald-500 transition-all duration-300"
+                    style={{ width: `${creditBarPercent}%` }}
+                  />
+                </div>
+                <p className="text-sm font-medium text-emerald-800">
+                  {cappedCredits} / {FREE_TRIAL_CREDIT_LIMIT} credits
+                </p>
               </div>
 
               <div className="mb-6 rounded-2xl border border-slate-200 bg-white p-4">
