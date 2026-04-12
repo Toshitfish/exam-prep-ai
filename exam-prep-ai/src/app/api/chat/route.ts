@@ -36,8 +36,7 @@ const buildChatPanelPolicy = (userName: string) =>
 
 const MAX_RECENT_MESSAGES = 1;
 const MAX_LATEST_SOURCE_CHARS = 9000;
-const MAX_OLDER_ASSISTANT_CHARS = 1400;
-const MAX_LATEST_ASSISTANT_CHARS = 2200;
+const RETRY_SOURCE_CHARS = 3500;
 
 const trimText = (text: string, maxChars: number) => {
   if (text.length <= maxChars) {
@@ -46,16 +45,16 @@ const trimText = (text: string, maxChars: number) => {
   return `${text.slice(0, maxChars)}\n\n[trimmed for context size]`;
 };
 
-const trimGroundedUserText = (text: string, keepSourceContext: boolean) => {
+const trimGroundedUserText = (text: string, keepSourceContext: boolean, maxSourceChars: number) => {
   const questionMatch = text.match(/User question:\s*([\s\S]*?)\n\nUploaded source context:/i);
   const sourceMatch = text.match(/Uploaded source context:\s*([\s\S]*)$/i);
 
   if (keepSourceContext) {
     if (!sourceMatch) {
-      return trimText(text, MAX_LATEST_SOURCE_CHARS + 1200);
+      return trimText(text, maxSourceChars + 1200);
     }
 
-    const sourceBlock = trimText(sourceMatch[1].trim(), MAX_LATEST_SOURCE_CHARS);
+    const sourceBlock = trimText(sourceMatch[1].trim(), maxSourceChars);
     const questionBlock = questionMatch?.[1]?.trim() ?? "";
     const prefix = text.replace(/Uploaded source context:[\s\S]*$/i, "").trim();
 
@@ -72,7 +71,7 @@ const trimGroundedUserText = (text: string, keepSourceContext: boolean) => {
     .trim();
 };
 
-const compactChatMessages = (messages: UIMessage[]) => {
+const compactChatMessages = (messages: UIMessage[], maxSourceChars: number) => {
   const latestUser = [...messages].reverse().find((message) => message.role === "user");
   if (!latestUser) {
     return [] as UIMessage[];
@@ -87,7 +86,7 @@ const compactChatMessages = (messages: UIMessage[]) => {
 
       return {
         ...part,
-        text: trimGroundedUserText(part.text ?? "", true),
+        text: trimGroundedUserText(part.text ?? "", true, maxSourceChars),
       };
     }),
   };
@@ -105,7 +104,7 @@ export async function POST(req: Request) {
 
   const { messages } = (await req.json()) as { messages: UIMessage[] };
   try {
-    const compactMessages = compactChatMessages(messages);
+    const compactMessages = compactChatMessages(messages, MAX_LATEST_SOURCE_CHARS);
     const modelMessages = await convertToModelMessages(compactMessages);
 
     const result = await streamText({
@@ -117,7 +116,21 @@ export async function POST(req: Request) {
 
     return result.toUIMessageStreamResponse();
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Chat request failed.";
-    return Response.json({ error: message }, { status: 500 });
+    try {
+      // Retry once with a much smaller source context payload.
+      const compactMessages = compactChatMessages(messages, RETRY_SOURCE_CHARS);
+      const modelMessages = await convertToModelMessages(compactMessages);
+      const retryResult = await streamText({
+        model: openrouter("openrouter/auto"),
+        system: buildChatPanelPolicy(userName),
+        messages: modelMessages,
+        maxRetries: 0,
+      });
+
+      return retryResult.toUIMessageStreamResponse();
+    } catch (retryError) {
+      const message = retryError instanceof Error ? retryError.message : "Chat request failed.";
+      return Response.json({ error: message }, { status: 500 });
+    }
   }
 }

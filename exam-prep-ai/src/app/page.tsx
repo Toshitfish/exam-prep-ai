@@ -1347,9 +1347,14 @@ export default function Home() {
     return false;
   };
 
-  const generateMockPaper = async () => {
+  const generateMockPaper = async (difficultyOverride?: "balanced" | "exam-hard" | "mostly-medium") => {
     if (!requireSource("workspace") || answerKeyLoading) {
       return;
+    }
+
+    const selectedDifficulty = difficultyOverride ?? mockPaperDifficulty;
+    if (difficultyOverride && difficultyOverride !== mockPaperDifficulty) {
+      setMockPaperDifficulty(difficultyOverride);
     }
 
     setActiveTool("answer-key");
@@ -1371,9 +1376,9 @@ export default function Home() {
     }
 
     const difficultyLabel =
-      mockPaperDifficulty === "exam-hard"
+      selectedDifficulty === "exam-hard"
         ? "Mostly exam-hard"
-        : mockPaperDifficulty === "mostly-medium"
+        : selectedDifficulty === "mostly-medium"
           ? "Mostly medium"
           : "Balanced (easy / medium / hard)";
 
@@ -2305,6 +2310,30 @@ ${getSourceContext()}
     setSourceLibrary((previous) => previous.map((item) => (item.id === id ? { ...item, role } : item)));
   };
 
+  const relinkSourcePdf = (id: string, fileList: FileList | null) => {
+    const file = fileList?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (file.type !== "application/pdf") {
+      setMockPaperNotice("Please select a PDF file when re-linking template underlay.");
+      return;
+    }
+
+    const existingUrl = sourcePdfUrls[id];
+    if (existingUrl) {
+      URL.revokeObjectURL(existingUrl);
+    }
+
+    const nextUrl = URL.createObjectURL(file);
+    setSourcePdfUrls((previous) => ({
+      ...previous,
+      [id]: nextUrl,
+    }));
+    setMockPaperNotice("Template PDF re-linked for underlay preview.");
+  };
+
   const removeSource = (id: string) => {
     const removedPdfUrl = sourcePdfUrls[id];
     if (removedPdfUrl) {
@@ -2529,6 +2558,21 @@ ${getSourceContext()}
                                 <option value="model-answer">Model Answer</option>
                                 <option value="notes">Notes</option>
                               </select>
+                            </div>
+                            <div className="mt-2 flex items-center justify-between gap-2">
+                              <span className="text-[11px] font-medium text-slate-500">Template PDF</span>
+                              <label className="cursor-pointer rounded-md border border-slate-200 bg-white px-2 py-1 text-[11px] font-medium text-slate-600 transition hover:bg-slate-50">
+                                Re-link PDF
+                                <input
+                                  type="file"
+                                  accept="application/pdf,.pdf"
+                                  className="hidden"
+                                  onChange={(event) => {
+                                    relinkSourcePdf(source.id, event.target.files);
+                                    event.currentTarget.value = "";
+                                  }}
+                                />
+                              </label>
                             </div>
                           </div>
                         ))}
@@ -3507,12 +3551,20 @@ ${getSourceContext()}
           </select>
           <button
             type="button"
-            onClick={generateMockPaper}
+            onClick={() => void generateMockPaper()}
             disabled={answerKeyLoading}
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-600 disabled:bg-slate-300"
           >
             {answerKeyLoading ? <LoaderCircle size={14} className="animate-spin" /> : <KeyRound size={14} />}
             Generate Mock Paper
+          </button>
+          <button
+            type="button"
+            onClick={() => void generateMockPaper("exam-hard")}
+            disabled={answerKeyLoading}
+            className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
+          >
+            Regenerate Harder
           </button>
           <button
             type="button"
