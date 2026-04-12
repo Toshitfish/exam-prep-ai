@@ -10,6 +10,7 @@ type CreditBody = {
 };
 
 const INFINITE_CREDITS_BALANCE = 1_000_000_000;
+const BUILT_IN_INFINITE_EMAILS = ["brandontoto0825@gmail.com"];
 
 const parseCsvEnv = (value: string | undefined) =>
   (value ?? "")
@@ -17,8 +18,9 @@ const parseCsvEnv = (value: string | undefined) =>
     .map((item) => item.trim().toLowerCase())
     .filter(Boolean);
 
-const isInfiniteCreditsAccount = (userId: string, email?: string | null) => {
+const isInfiniteCreditsAccountSync = (userId: string, email?: string | null) => {
   const configuredEmails = [
+    ...BUILT_IN_INFINITE_EMAILS,
     ...parseCsvEnv(process.env.INFINITE_CREDITS_EMAILS),
     ...parseCsvEnv(process.env.INFINITE_CREDITS_EMAIL),
   ];
@@ -31,6 +33,23 @@ const isInfiniteCreditsAccount = (userId: string, email?: string | null) => {
   const normalizedEmail = (email ?? "").trim().toLowerCase();
 
   return configuredUserIds.includes(normalizedUserId) || (normalizedEmail ? configuredEmails.includes(normalizedEmail) : false);
+};
+
+const isInfiniteCreditsAccount = async (userId: string, email?: string | null) => {
+  if (isInfiniteCreditsAccountSync(userId, email)) {
+    return true;
+  }
+
+  const dbUser = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { email: true },
+  });
+
+  if (!dbUser?.email) {
+    return false;
+  }
+
+  return isInfiniteCreditsAccountSync(userId, dbUser.email);
 };
 
 const parseAmount = (raw: unknown) => {
@@ -52,7 +71,7 @@ export async function GET() {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (isInfiniteCreditsAccount(session.user.id, session.user.email)) {
+  if (await isInfiniteCreditsAccount(session.user.id, session.user.email)) {
     return NextResponse.json({ credits: INFINITE_CREDITS_BALANCE, infinite: true });
   }
 
@@ -74,7 +93,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  if (isInfiniteCreditsAccount(session.user.id, session.user.email)) {
+  if (await isInfiniteCreditsAccount(session.user.id, session.user.email)) {
     const body = (await req.json().catch(() => ({}))) as CreditBody;
     const feature = typeof body.feature === "string" ? body.feature.trim().slice(0, 120) : "tool";
     return NextResponse.json({ ok: true, credits: INFINITE_CREDITS_BALANCE, charged: 0, feature, infinite: true });
