@@ -128,3 +128,31 @@ textarea,
   margin-bottom: 2px;
   font-size: 1.09em;
 }
+
+.mock-paper-preview-page {
+  width: 100%;
+  max-width: 794px;
+  min-height: 1123px;
+  aspect-ratio: 210 / 297;
+  page-break-after: always;
+}
+
+.mock-paper-preview {
+  font-family: "Times New Roman", "Cambria", Georgia, serif;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: 0.01em;
+}
+
+.mock-paper-preview h1,
+.mock-paper-preview h2,
+.mock-paper-preview h3,
+.mock-paper-preview h4 {
+  font-family: "Times New Roman", "Cambria", Georgia, serif;
+  font-weight: 700;
+  letter-spacing: 0.015em;
+}
+
+.mock-paper-preview hr {
+  border-color: #d1d5db;
+}

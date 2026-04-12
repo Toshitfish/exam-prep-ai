@@ -552,6 +552,7 @@ export default function Home() {
   type TopicPrediction = { topic: string; confidence: "High" | "Medium" | "Low"; evidence: string };
   type TopicPredictorData = { predictions: TopicPrediction[]; rawResponse: string };
   type MockPaperChatMessage = { role: "user" | "assistant"; text: string };
+  type MockPaperGenerationStage = "idle" | "analyzing" | "template" | "drafting" | "markscheme" | "formatting" | "done";
   type ParseDiagnostics = {
     selectedPass: "primary" | "alternate-mode" | "scan-fallback" | "legacy-gpt4o" | null;
     passes: Array<{
@@ -663,6 +664,10 @@ export default function Home() {
   const [mockPaperChatMessages, setMockPaperChatMessages] = useState<MockPaperChatMessage[]>([]);
   const [mockPaperChatLoading, setMockPaperChatLoading] = useState(false);
   const [mockPaperChatError, setMockPaperChatError] = useState<string | null>(null);
+  const [mockPaperEditQueue, setMockPaperEditQueue] = useState<string[]>([]);
+  const [mockPaperGenerationStage, setMockPaperGenerationStage] = useState<MockPaperGenerationStage>("idle");
+  const [sourcePdfUrls, setSourcePdfUrls] = useState<Record<string, string>>({});
+  const [showTemplateUnderlay, setShowTemplateUnderlay] = useState(true);
   const [gradingExportFormat, setGradingExportFormat] = useState<"doc" | "pdf">("doc");
   const [gradingFeedbackDraft, setGradingFeedbackDraft] = useState("");
   const [isEditingGradingFeedback, setIsEditingGradingFeedback] = useState(false);
@@ -717,6 +722,28 @@ export default function Home() {
 
     setLearnerName(session.user.name);
   }, [session?.user?.name]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(sourcePdfUrls).forEach((url) => {
+        URL.revokeObjectURL(url);
+      });
+    };
+  }, [sourcePdfUrls]);
+
+  useEffect(() => {
+    if (answerKeyLoading || mockPaperChatLoading || mockPaperEditQueue.length === 0) {
+      return;
+    }
+
+    if (!answerKeyOutput.trim()) {
+      return;
+    }
+
+    const [nextInstruction, ...remaining] = mockPaperEditQueue;
+    setMockPaperEditQueue(remaining);
+    void applyMockPaperInstruction(nextInstruction, true);
+  }, [answerKeyLoading, mockPaperChatLoading, mockPaperEditQueue, answerKeyOutput]);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -1038,7 +1065,10 @@ export default function Home() {
         selected: true,
       };
 
+      const pdfUrl = URL.createObjectURL(file);
+
       setSourceLibrary((previous) => [...previous, newSource]);
+      setSourcePdfUrls((previous) => ({ ...previous, [newSource.id]: pdfUrl }));
       setSourceText(parsedText);
     } catch (error) {
       didFail = true;
@@ -1209,6 +1239,15 @@ export default function Home() {
     return { hasTemplate: true, templateHint: templateLines };
   };
 
+  const getMockPaperPages = (content: string) => {
+    const parts = content
+      .split(/\n\s*\[\[PAGE_BREAK\]\]\s*\n/gi)
+      .map((part) => part.trim())
+      .filter(Boolean);
+
+    return parts.length > 0 ? parts : [content.trim()];
+  };
+
   const exportTextOutput = (content: string, format: "doc" | "pdf", fileNameBase: string) => {
     const trimmed = content.trim();
     if (!trimmed) {
@@ -1312,6 +1351,13 @@ export default function Home() {
     setAnswerKeyError(null);
     setMockPaperNotice(null);
     setMockPaperChatError(null);
+    setMockPaperGenerationStage("analyzing");
+
+    const stageTimers: number[] = [];
+    stageTimers.push(window.setTimeout(() => setMockPaperGenerationStage("template"), 700));
+    stageTimers.push(window.setTimeout(() => setMockPaperGenerationStage("drafting"), 1500));
+    stageTimers.push(window.setTimeout(() => setMockPaperGenerationStage("markscheme"), 2300));
+    stageTimers.push(window.setTimeout(() => setMockPaperGenerationStage("formatting"), 3200));
 
     const hasTopicPredictor = topicPredictorData?.predictions?.length || topicPredictorDraft.trim();
     if (!hasTopicPredictor) {
@@ -1367,6 +1413,9 @@ Formatting rules:
 - Keep headings clear and printable.
 - Use realistic exam wording and mark distribution.
 - Do not include meta commentary.
+- Preserve punctuation symbols, numbering symbols, and separators reflected in the uploaded template.
+- Insert page separators using exactly: [[PAGE_BREAK]] between pages.
+- Keep each page length balanced for print readability.
 
 Source document markdown:
 ${getSourceContext()}
@@ -1379,17 +1428,22 @@ ${topicContext}
       const responseText = await requestToolOutput(prompt);
       setAnswerKeyOutput(responseText || "No mock paper generated.");
       setIsEditingAnswerKeyOutput(false);
+      setMockPaperGenerationStage("done");
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to generate mock paper.";
       setAnswerKeyError(message);
+      setMockPaperGenerationStage("idle");
     } finally {
+      stageTimers.forEach((timerId) => window.clearTimeout(timerId));
+      window.setTimeout(() => {
+        setMockPaperGenerationStage("idle");
+      }, 900);
       setAnswerKeyLoading(false);
     }
   };
 
-  const applyMockPaperEdit = async () => {
-    const instruction = mockPaperChatInput.trim();
-    if (!instruction || mockPaperChatLoading) {
+  const applyMockPaperInstruction = async (instruction: string, fromQueue = false) => {
+    if (!instruction.trim() || mockPaperChatLoading) {
       return;
     }
 
@@ -1400,8 +1454,10 @@ ${topicContext}
 
     setMockPaperChatError(null);
     setMockPaperChatLoading(true);
-    setMockPaperChatMessages((previous) => [...previous, { role: "user", text: instruction }]);
-    setMockPaperChatInput("");
+    setMockPaperChatMessages((previous) => [
+      ...previous,
+      { role: "user", text: fromQueue ? `${instruction} (queued)` : instruction },
+    ]);
 
     const { hasTemplate, templateHint } = getPastPaperTemplateHint();
 
@@ -1412,6 +1468,8 @@ Goal:
 - Apply the user's modification request to the mock paper.
 - Preserve printable exam structure and keep mark scheme appendix present.
 - Keep alignment with uploaded past paper template.
+- Preserve punctuation symbols and visual separators used in the current draft/template.
+- Keep page boundaries with [[PAGE_BREAK]] markers.
 
 ${
   hasTemplate
@@ -1442,6 +1500,26 @@ Return ONLY the full updated mock paper in markdown.
     } finally {
       setMockPaperChatLoading(false);
     }
+  };
+
+  const applyMockPaperEdit = async () => {
+    const instruction = mockPaperChatInput.trim();
+    if (!instruction) {
+      return;
+    }
+
+    setMockPaperChatInput("");
+
+    if (answerKeyLoading) {
+      setMockPaperEditQueue((previous) => [...previous, instruction]);
+      setMockPaperChatMessages((previous) => [
+        ...previous,
+        { role: "assistant", text: "Queued. I will apply this edit right after generation finishes." },
+      ]);
+      return;
+    }
+
+    await applyMockPaperInstruction(instruction);
   };
 
   const openMockPaperWindow = () => {
@@ -1925,8 +2003,12 @@ ${getSourceContext()}
   }, [showStartupSplash]);
 
   const clearFile = () => {
+    Object.values(sourcePdfUrls).forEach((url) => {
+      URL.revokeObjectURL(url);
+    });
     setSourceText("");
     setSourceLibrary([]);
+    setSourcePdfUrls({});
     setActiveSourceId(null);
     setParseDiagnostics(null);
     setIsParsing(false);
@@ -2203,6 +2285,11 @@ ${getSourceContext()}
   };
 
   const activeSource = sourceLibrary.find((item) => item.id === activeSourceId) ?? null;
+  const templatePreviewSource =
+    sourceLibrary.find((item) => item.selected && item.role === "question-paper" && sourcePdfUrls[item.id]) ??
+    sourceLibrary.find((item) => item.role === "question-paper" && sourcePdfUrls[item.id]) ??
+    null;
+  const templatePreviewPdfUrl = templatePreviewSource ? sourcePdfUrls[templatePreviewSource.id] : null;
 
   const setSourceSelected = (id: string, selected: boolean) => {
     setSourceLibrary((previous) => previous.map((item) => (item.id === id ? { ...item, selected } : item)));
@@ -2213,6 +2300,16 @@ ${getSourceContext()}
   };
 
   const removeSource = (id: string) => {
+    const removedPdfUrl = sourcePdfUrls[id];
+    if (removedPdfUrl) {
+      URL.revokeObjectURL(removedPdfUrl);
+      setSourcePdfUrls((previous) => {
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+    }
+
     setSourceLibrary((previous) => {
       const next = previous.filter((item) => item.id !== id);
       if (activeSourceId === id) {
@@ -3357,6 +3454,37 @@ ${getSourceContext()}
         onResize={(width, height) => dispatchDesktop({ type: "RESIZE_WINDOW", id: "answer-key", width, height })}
         contentClassName="h-full overflow-y-auto p-6"
       >
+        <div className="mb-4 rounded-xl border border-slate-200 bg-slate-50 p-3">
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Generation Process</p>
+            {mockPaperEditQueue.length > 0 ? (
+              <p className="text-xs font-medium text-amber-600">Queued edits: {mockPaperEditQueue.length}</p>
+            ) : null}
+          </div>
+          <div className="grid grid-cols-2 gap-2 md:grid-cols-5">
+            {[
+              { id: "analyzing", label: "Analyzing Sources" },
+              { id: "template", label: "Template Match" },
+              { id: "drafting", label: "Drafting Paper" },
+              { id: "markscheme", label: "Mark Scheme" },
+              { id: "formatting", label: "Printable Layout" },
+            ].map((step, index) => {
+              const order: Record<string, number> = { analyzing: 1, template: 2, drafting: 3, markscheme: 4, formatting: 5, done: 6, idle: 0 };
+              const active = order[mockPaperGenerationStage] >= index + 1;
+              return (
+                <div
+                  key={step.id}
+                  className={`rounded-lg border px-2 py-2 text-[11px] font-semibold ${
+                    active ? "border-indigo-200 bg-indigo-50 text-indigo-700" : "border-slate-200 bg-white text-slate-400"
+                  }`}
+                >
+                  {step.label}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
         <div className="mb-5 flex flex-wrap items-center gap-2">
           <select
             value={mockPaperDifficulty}
@@ -3415,7 +3543,18 @@ ${getSourceContext()}
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_320px]">
           <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
-            <h3 className="mb-3 text-sm font-semibold text-slate-700">Generated Mock Paper</h3>
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-semibold text-slate-700">Generated Mock Paper</h3>
+              <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
+                <input
+                  type="checkbox"
+                  checked={showTemplateUnderlay}
+                  onChange={(event) => setShowTemplateUnderlay(event.target.checked)}
+                  className="h-3.5 w-3.5 rounded border-slate-300"
+                />
+                Template PDF Underlay
+              </label>
+            </div>
             {answerKeyOutput ? (
               isEditingAnswerKeyOutput ? (
                 <textarea
@@ -3424,8 +3563,33 @@ ${getSourceContext()}
                   className="h-[360px] w-full resize-none rounded-xl border border-slate-200 bg-white p-4 text-sm leading-6 text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
                 />
               ) : (
-                <div className="app-ui-content prose prose-sm max-w-none text-slate-700">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{answerKeyOutput}</ReactMarkdown>
+                <div className="rounded-xl border border-slate-200 bg-slate-100 p-3">
+                  <div className={`${showTemplateUnderlay && templatePreviewPdfUrl ? "grid gap-4 xl:grid-cols-2" : "block"}`}>
+                    {showTemplateUnderlay && templatePreviewPdfUrl ? (
+                      <div className="rounded-lg border border-slate-300 bg-white p-2 shadow-sm">
+                        <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                          Template PDF: {templatePreviewSource?.name}
+                        </p>
+                        <iframe
+                          src={templatePreviewPdfUrl}
+                          title="Uploaded past paper template"
+                          className="h-[940px] w-full rounded border border-slate-200"
+                        />
+                      </div>
+                    ) : null}
+
+                    <div className="mx-auto w-full max-w-[820px] space-y-4">
+                      {getMockPaperPages(answerKeyOutput).map((page, index) => (
+                        <div key={`mock-paper-page-${index}`} className="mock-paper-preview-page rounded-sm border border-slate-300 bg-white px-10 py-8 shadow-sm">
+                          <div className="mock-paper-preview app-ui-content prose prose-sm max-w-none text-slate-800">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>{page}</ReactMarkdown>
+                          </div>
+                          <div className="mt-8 border-t border-slate-200 pt-2 text-right text-[11px] text-slate-500">Page {index + 1}</div>
+                        </div>
+                      ))}
+                      <p className="text-[11px] text-slate-500">Template fidelity mode: mirrors uploaded past-paper structure, symbols, and page breaks when available.</p>
+                    </div>
+                  </div>
                 </div>
               )
             ) : (

@@ -172,7 +172,8 @@ function extractMarkdown(payload: Record<string, unknown>): string | undefined {
       .filter(Boolean);
 
     if (markdownPages.length > 0) {
-      return markdownPages.join("\n\n");
+      // Preserve source pagination for downstream printable-template mirroring.
+      return markdownPages.join("\n\n[[PAGE_BREAK]]\n\n");
     }
   }
 

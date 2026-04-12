@@ -34,7 +34,7 @@ const buildChatPanelPolicy = (userName: string) =>
     "When helpful, end with a short checklist the user can act on immediately.",
   ].join(" ");
 
-const MAX_RECENT_MESSAGES = 6;
+const MAX_RECENT_MESSAGES = 2;
 const MAX_LATEST_SOURCE_CHARS = 9000;
 const MAX_OLDER_ASSISTANT_CHARS = 1400;
 const MAX_LATEST_ASSISTANT_CHARS = 2200;
@@ -73,62 +73,45 @@ const trimGroundedUserText = (text: string, keepSourceContext: boolean) => {
 };
 
 const compactChatMessages = (messages: UIMessage[]) => {
-  const recent = messages.slice(-MAX_RECENT_MESSAGES);
-  const latestUserIndex = (() => {
-    for (let index = recent.length - 1; index >= 0; index -= 1) {
-      if (recent[index].role === "user") {
-        return index;
+  const latestUser = [...messages].reverse().find((message) => message.role === "user");
+  if (!latestUser) {
+    return [] as UIMessage[];
+  }
+
+  const latestAssistant = [...messages].reverse().find((message) => message.role === "assistant");
+  const latestUserCompacted: UIMessage = {
+    ...latestUser,
+    parts: latestUser.parts.map((part) => {
+      if (part.type !== "text") {
+        return part;
       }
-    }
-    return -1;
-  })();
 
-  const latestAssistantIndex = (() => {
-    for (let index = recent.length - 1; index >= 0; index -= 1) {
-      if (recent[index].role === "assistant") {
-        return index;
+      return {
+        ...part,
+        text: trimGroundedUserText(part.text ?? "", true),
+      };
+    }),
+  };
+
+  if (!latestAssistant) {
+    return [latestUserCompacted];
+  }
+
+  const assistantCompacted: UIMessage = {
+    ...latestAssistant,
+    parts: latestAssistant.parts.map((part) => {
+      if (part.type !== "text") {
+        return part;
       }
-    }
-    return -1;
-  })();
 
-  return recent.map((message, index) => {
-    if (message.role === "user") {
-      const keepSourceContext = index === latestUserIndex;
       return {
-        ...message,
-        parts: message.parts.map((part) => {
-          if (part.type !== "text") {
-            return part;
-          }
-
-          return {
-            ...part,
-            text: trimGroundedUserText(part.text ?? "", keepSourceContext),
-          };
-        }),
+        ...part,
+        text: trimText(part.text ?? "", MAX_OLDER_ASSISTANT_CHARS),
       };
-    }
+    }),
+  };
 
-    if (message.role === "assistant") {
-      const maxChars = index === latestAssistantIndex ? MAX_LATEST_ASSISTANT_CHARS : MAX_OLDER_ASSISTANT_CHARS;
-      return {
-        ...message,
-        parts: message.parts.map((part) => {
-          if (part.type !== "text") {
-            return part;
-          }
-
-          return {
-            ...part,
-            text: trimText(part.text ?? "", maxChars),
-          };
-        }),
-      };
-    }
-
-    return message;
-  });
+  return [assistantCompacted, latestUserCompacted].slice(-MAX_RECENT_MESSAGES);
 };
 
 export async function POST(req: Request) {
