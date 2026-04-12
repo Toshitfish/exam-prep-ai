@@ -1502,6 +1502,75 @@ export default function Home() {
     return parts.length > 0 ? parts : [content.trim()];
   };
 
+  const paginateForA4Output = (text: string) => {
+    const lines = text
+      .split("\n")
+      .map((line) => line.replace(/\s+$/g, ""))
+      .filter((line, index, arr) => {
+        if (line.trim()) {
+          return true;
+        }
+
+        // Keep at most one consecutive blank line.
+        const prev = arr[index - 1] ?? "";
+        return prev.trim().length > 0;
+      });
+
+    if (lines.length === 0) {
+      return "";
+    }
+
+    const pages: string[] = [];
+    const maxLinesPerPage = 52;
+    let currentPage: string[] = [];
+
+    const pushPage = () => {
+      const trimmed = currentPage.join("\n").trim();
+      if (trimmed) {
+        pages.push(trimmed);
+      }
+      currentPage = [];
+    };
+
+    for (const line of lines) {
+      const isHardSectionBoundary = /^(Section\s+[A-Z0-9]|Mark\s*Scheme|Instructions\s+to\s+Candidates|Question\s*\d+)/i.test(
+        line.trim(),
+      );
+
+      if (currentPage.length >= maxLinesPerPage || (isHardSectionBoundary && currentPage.length >= Math.floor(maxLinesPerPage * 0.65))) {
+        pushPage();
+      }
+
+      currentPage.push(line);
+    }
+
+    pushPage();
+    return pages.join("\n\n[[PAGE_BREAK]]\n\n");
+  };
+
+  const normalizeMockPaperOutput = (content: string) => {
+    const normalized = content
+      .replace(/\r\n/g, "\n")
+      .replace(/^#{1,6}\s+/gm, "")
+      .replace(/\*\*(.*?)\*\*/g, "$1")
+      .trim();
+    if (!normalized) {
+      return "";
+    }
+
+    const pages = normalized
+      .split(/\n\s*\[\[PAGE_BREAK\]\]\s*\n/gi)
+      .map((page) => page.replace(/\n{3,}/g, "\n\n").trim())
+      .filter(Boolean);
+
+    const merged = pages.join("\n\n").trim();
+    if (!merged) {
+      return "";
+    }
+
+    return paginateForA4Output(merged);
+  };
+
   const exportTextOutput = (content: string, format: "doc" | "pdf", fileNameBase: string) => {
     const trimmed = content.trim();
     if (!trimmed) {
@@ -1752,7 +1821,7 @@ ${topicContext}
 
     try {
       const responseText = await requestToolOutput(prompt);
-      setAnswerKeyOutput(responseText || "No mock paper generated.");
+      setAnswerKeyOutput(normalizeMockPaperOutput(responseText || "No mock paper generated."));
       setIsEditingAnswerKeyOutput(false);
       setMockPaperGenerationStage("done");
       const charged = await deductCredits(TOOL_CREDIT_COSTS.generateMockPaper, "Generate Mock Paper");
@@ -1835,7 +1904,7 @@ Return ONLY the full updated mock paper in markdown.
 
     try {
       const updatedPaper = await requestToolOutput(prompt);
-      setAnswerKeyOutput(updatedPaper || answerKeyOutput);
+      setAnswerKeyOutput(normalizeMockPaperOutput(updatedPaper || answerKeyOutput));
       setMockPaperChatMessages((previous) => [...previous, { role: "assistant", text: "Applied. Mock paper updated." }]);
       const charged = await deductCredits(TOOL_CREDIT_COSTS.mockEdit, "AI Mock Edit");
       if (!charged) {
@@ -2421,6 +2490,16 @@ ${getSourceContext()}
     }
 
     setAnswerKeyOutput("");
+  };
+
+  const toggleAnswerKeyEditing = () => {
+    setIsEditingAnswerKeyOutput((editing) => {
+      if (editing) {
+        setAnswerKeyOutput((previous) => normalizeMockPaperOutput(previous));
+      }
+
+      return !editing;
+    });
   };
 
   const clearGradingAnswer = () => {
@@ -4230,7 +4309,7 @@ ${getSourceContext()}
           </button>
           <button
             type="button"
-            onClick={() => setIsEditingAnswerKeyOutput((editing) => !editing)}
+            onClick={toggleAnswerKeyEditing}
             disabled={!answerKeyOutput.trim()}
             className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -4344,7 +4423,6 @@ ${getSourceContext()}
                               className="mx-auto"
                               style={{
                                 width: `${MOCK_PAPER_A4_WIDTH_PX * previewScale}px`,
-                                height: `${MOCK_PAPER_A4_HEIGHT_PX * previewScale}px`,
                               }}
                             >
                               <div
@@ -4352,7 +4430,6 @@ ${getSourceContext()}
                                   transform: `scale(${previewScale})`,
                                   transformOrigin: "top left",
                                   width: `${MOCK_PAPER_A4_WIDTH_PX}px`,
-                                  height: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
                                 }}
                               >
                                 <div
@@ -4360,9 +4437,6 @@ ${getSourceContext()}
                                   style={{
                                     width: `${MOCK_PAPER_A4_WIDTH_PX}px`,
                                     maxWidth: `${MOCK_PAPER_A4_WIDTH_PX}px`,
-                                    height: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
-                                    minHeight: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
-                                    aspectRatio: "210 / 297",
                                   }}
                                 >
                                   <div className="mock-paper-preview app-ui-content prose prose-sm max-w-none font-serif leading-relaxed text-slate-800 prose-headings:font-serif prose-p:my-1 prose-li:my-0.5">
