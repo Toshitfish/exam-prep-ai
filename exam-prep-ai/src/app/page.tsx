@@ -89,6 +89,23 @@ const TOOL_CREDIT_COSTS = {
   generateMockPaper: 3,
 } as const;
 
+const WINDOW_TOOL_CREDIT_COSTS = {
+  "answer-key": TOOL_CREDIT_COSTS.generateMockPaper,
+  "grade-answer": TOOL_CREDIT_COSTS.gradeAnswer,
+  "marking-rules": TOOL_CREDIT_COSTS.markingRules,
+  "topic-predictor": TOOL_CREDIT_COSTS.topicPredictor,
+  "timed-section": TOOL_CREDIT_COSTS.timedSection,
+} as const;
+
+const STUDIO_TOOL_CREDIT_COSTS = {
+  "answer-key": TOOL_CREDIT_COSTS.generateMockPaper,
+  "grade-answer": TOOL_CREDIT_COSTS.gradeAnswer,
+  "extract-dbq": TOOL_CREDIT_COSTS.extractDbq,
+  "topic-predictor": TOOL_CREDIT_COSTS.topicPredictor,
+  "marking-rules": TOOL_CREDIT_COSTS.markingRules,
+  "timed-section": TOOL_CREDIT_COSTS.timedSection,
+} as const;
+
 const getWindowViewportBounds = (win: FloatingWindowState) => {
   if (typeof window === "undefined") {
     return { minX: 20, minY: 20, maxX: 20, maxY: 20 };
@@ -710,6 +727,7 @@ export default function Home() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [userCredits, setUserCredits] = useState(20);
   const [creditError, setCreditError] = useState<string | null>(null);
+  const isCreditsDepleted = userCredits <= 0;
   const [marketplacePanel, setMarketplacePanel] = useState<MarketplacePanel>("store");
   const hasHydratedWorkspace = useRef(false);
   const [workspaceReadyToSave, setWorkspaceReadyToSave] = useState(false);
@@ -1064,6 +1082,11 @@ export default function Home() {
   };
 
   const onDrop = async (acceptedFiles: File[]) => {
+    if (isCreditsDepleted) {
+      setCreditError("You have used up your credits. Top up in Marketplace to continue.");
+      return;
+    }
+
     const inferSourceRole = (name: string): SourceRole => {
       const lowerName = name.toLowerCase();
       if (/(mark\s*scheme|marking\s*scheme|rubric|grading)/.test(lowerName)) {
@@ -1201,6 +1224,7 @@ export default function Home() {
     onDrop,
     accept: { "application/pdf": [".pdf"] },
     maxFiles: 1,
+    disabled: isCreditsDepleted,
   });
 
   const getMessageText = (message: { parts: Array<{ type: string; text?: string }> }) =>
@@ -1504,6 +1528,11 @@ export default function Home() {
   };
 
   const generateMockPaper = async (difficultyOverride?: "balanced" | "exam-hard" | "mostly-medium") => {
+    if (isCreditsDepleted) {
+      setCreditError("You have used up your credits. Top up in Marketplace to continue.");
+      return;
+    }
+
     if (!requireSource("workspace") || answerKeyLoading) {
       return;
     }
@@ -1619,6 +1648,12 @@ ${topicContext}
   };
 
   const applyMockPaperInstruction = async (instruction: string, fromQueue = false) => {
+    if (isCreditsDepleted) {
+      setCreditError("You have used up your credits. Top up in Marketplace to continue.");
+      setMockPaperChatError("You have used up your credits. Go to Marketplace to top up.");
+      return;
+    }
+
     if (!instruction.trim() || mockPaperChatLoading) {
       return;
     }
@@ -1713,6 +1748,11 @@ Return ONLY the full updated mock paper in markdown.
   };
 
   const runExtractDbqs = async () => {
+    if (isCreditsDepleted) {
+      setCreditError("You have used up your credits. Top up in Marketplace to continue.");
+      return;
+    }
+
     if (!requireSource("workspace") || workspaceIsLoading) {
       return;
     }
@@ -1747,6 +1787,11 @@ ${getSourceContext()}
   };
 
   const runGradeAnswer = async () => {
+    if (isCreditsDepleted) {
+      setCreditError("You have used up your credits. Top up in Marketplace to continue.");
+      return;
+    }
+
     if (!requireSource("grading") || gradingIsLoading) {
       return;
     }
@@ -1985,6 +2030,11 @@ ${prompt}
   };
 
   const generateMarkingRules = async () => {
+    if (isCreditsDepleted) {
+      setCreditError("You have used up your credits. Top up in Marketplace to continue.");
+      return;
+    }
+
     if (!requireSource("workspace") || markingRulesLoading) {
       return;
     }
@@ -2028,6 +2078,11 @@ ${getSourceContext()}
   };
 
   const generateTopicPredictions = async () => {
+    if (isCreditsDepleted) {
+      setCreditError("You have used up your credits. Top up in Marketplace to continue.");
+      return;
+    }
+
     if (!requireSource("workspace") || topicPredictorLoading) {
       return;
     }
@@ -2064,6 +2119,11 @@ ${getSourceContext()}
   };
 
   const openWindow = (id: WindowId) => {
+    if (isCreditsDepleted && WINDOW_TOOL_CREDIT_COSTS[id] > 0) {
+      setCreditError("You have used up your credits. Top up in Marketplace to continue.");
+      return;
+    }
+
     setActiveTool(id);
     dispatchDesktop({ type: "OPEN_WINDOW", id });
     dispatchDesktop({ type: "FOCUS_WINDOW", id });
@@ -2224,6 +2284,11 @@ ${getSourceContext()}
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (isCreditsDepleted) {
+      setCreditError("You have used up your credits. Top up in Marketplace to continue.");
+      return;
+    }
+
     const prompt = input.trim();
 
     if (!prompt || workspaceIsLoading || !requireSource("workspace")) {
@@ -2392,6 +2457,12 @@ ${getSourceContext()}
   const cappedCredits = Math.max(0, Math.min(userCredits, FREE_TRIAL_CREDIT_LIMIT));
   const creditBarPercent = (cappedCredits / FREE_TRIAL_CREDIT_LIMIT) * 100;
 
+  const teleportToMarketplace = () => {
+    setShowCoverPage(false);
+    setActiveView("purchase");
+    setMarketplacePanel("store");
+  };
+
   useEffect(() => {
     if (latestWorkspaceAssistantId === lastAnimatedAssistantId.current) {
       return;
@@ -2400,6 +2471,12 @@ ${getSourceContext()}
     lastAnimatedAssistantId.current = latestWorkspaceAssistantId ?? null;
     setAnimatedWorkspaceText("");
   }, [latestWorkspaceAssistantId]);
+
+  useEffect(() => {
+    if (!isCreditsDepleted && creditError?.toLowerCase().includes("used up your credits")) {
+      setCreditError(null);
+    }
+  }, [isCreditsDepleted, creditError]);
 
   useEffect(() => {
     if (workspaceStatus === "streaming") {
@@ -2701,7 +2778,11 @@ ${getSourceContext()}
 
                   <div
                     {...getRootProps()}
-                    className={`mb-4 flex cursor-pointer items-center gap-3 rounded-2xl border-2 border-dashed px-4 py-3 transition-colors ${
+                    className={`mb-4 flex items-center gap-3 rounded-2xl border-2 border-dashed px-4 py-3 transition-colors ${
+                      isCreditsDepleted
+                        ? "cursor-not-allowed border-slate-200 bg-slate-100/70 opacity-70"
+                        : "cursor-pointer"
+                    } ${
                       isDragActive
                         ? "border-indigo-500 bg-indigo-50"
                         : "border-slate-200 bg-slate-50/60 hover:border-indigo-300 hover:bg-white"
@@ -2931,11 +3012,11 @@ ${getSourceContext()}
                         onChange={(event) => setInput(event.target.value)}
                         placeholder="Ask Exam AI..."
                         className="flex-1 border-none bg-transparent px-2 text-[14px] text-slate-700 placeholder-slate-400 focus:outline-none"
-                        disabled={workspaceIsLoading}
+                        disabled={workspaceIsLoading || isCreditsDepleted}
                       />
                       <button
                         type="submit"
-                        disabled={workspaceIsLoading || !input.trim()}
+                        disabled={workspaceIsLoading || !input.trim() || isCreditsDepleted}
                         className="flex h-9 w-9 items-center justify-center rounded-xl bg-orange-500 text-white transition-colors hover:bg-orange-600 disabled:bg-slate-300"
                         aria-label="Send"
                       >
@@ -2985,13 +3066,15 @@ ${getSourceContext()}
                 <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {studioTools.map((tool) => {
                     const Icon = tool.icon;
+                    const toolCost = STUDIO_TOOL_CREDIT_COSTS[tool.id as keyof typeof STUDIO_TOOL_CREDIT_COSTS] ?? 0;
                     return (
                       <button
                         key={tool.id}
                         onClick={tool.onClick}
+                        disabled={isCreditsDepleted && toolCost > 0}
                         className={`group flex min-h-28 flex-col items-start justify-start gap-2 rounded-xl border bg-white p-3 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
                           activeTool === tool.id ? "border-indigo-300" : "border-slate-200"
-                        }`}
+                        } disabled:cursor-not-allowed disabled:opacity-55 disabled:hover:translate-y-0 disabled:hover:shadow-sm`}
                         type="button"
                       >
                         <span className={`flex h-8 w-8 items-center justify-center rounded-lg ${tool.tone}`}>
@@ -3013,6 +3096,7 @@ ${getSourceContext()}
                     <button
                       type="button"
                       onClick={() => openWindow("grade-answer")}
+                      disabled={isCreditsDepleted}
                       className="inline-flex items-center gap-1 rounded-lg bg-indigo-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-600"
                     >
                       <PencilLine size={13} /> Grade Window
@@ -3797,6 +3881,21 @@ ${getSourceContext()}
 
   return (
     <main className={`${bodyFont.className} app-ui-chrome flex h-dvh w-full flex-col overflow-hidden bg-slate-50 text-slate-800 md:flex-row`}>
+      {isCreditsDepleted ? (
+        <div className="pointer-events-none fixed top-3 right-3 left-3 z-[70] md:left-20">
+          <div className="pointer-events-auto flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 shadow-lg">
+            <p className="font-medium">You have used up your credits. Paid functions are locked until you top up.</p>
+            <button
+              type="button"
+              onClick={teleportToMarketplace}
+              className="rounded-lg border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-700 transition hover:bg-rose-100"
+            >
+              Go to Marketplace
+            </button>
+          </div>
+        </div>
+      ) : null}
+
       <nav className="z-10 hidden h-full w-16 flex-shrink-0 border-r border-slate-100 bg-white py-6 md:flex md:flex-col md:items-center">
         <div className="mb-8 flex h-8 w-8 items-center justify-center rounded-lg bg-indigo-500 text-sm font-bold text-white">
           E
@@ -3920,7 +4019,7 @@ ${getSourceContext()}
           <button
             type="button"
             onClick={() => void generateMockPaper()}
-            disabled={answerKeyLoading}
+            disabled={answerKeyLoading || isCreditsDepleted}
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-600 disabled:bg-slate-300"
           >
             {answerKeyLoading ? <LoaderCircle size={14} className="animate-spin" /> : <KeyRound size={14} />}
@@ -3929,7 +4028,7 @@ ${getSourceContext()}
           <button
             type="button"
             onClick={() => void generateMockPaper("exam-hard")}
-            disabled={answerKeyLoading}
+            disabled={answerKeyLoading || isCreditsDepleted}
             className="inline-flex items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm font-semibold text-amber-700 transition hover:bg-amber-100 disabled:opacity-50"
           >
             Regenerate Harder
@@ -4075,7 +4174,7 @@ ${getSourceContext()}
               <button
                 type="button"
                 onClick={applyMockPaperEdit}
-                disabled={mockPaperChatLoading || !mockPaperChatInput.trim()}
+                disabled={mockPaperChatLoading || !mockPaperChatInput.trim() || isCreditsDepleted}
                 className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-3 py-2 text-xs font-semibold text-white transition hover:bg-indigo-600 disabled:bg-slate-300"
               >
                 {mockPaperChatLoading ? <LoaderCircle size={12} className="animate-spin" /> : null}
@@ -4106,13 +4205,14 @@ ${getSourceContext()}
               value={gradingAnswer}
               onChange={(event) => setGradingAnswer(event.target.value)}
               placeholder="Paste your essay/DBQ response here..."
+              disabled={isCreditsDepleted}
               className="mb-3 h-56 w-full resize-none rounded-xl border border-slate-200 p-4 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
             />
             <div className="flex gap-2">
               <button
                 type="button"
                 onClick={runGradeAnswer}
-                disabled={gradingIsLoading || !gradingAnswer.trim()}
+                disabled={gradingIsLoading || !gradingAnswer.trim() || isCreditsDepleted}
                 className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-600 disabled:bg-slate-300"
               >
                 {gradingIsLoading ? <LoaderCircle size={14} className="animate-spin" /> : null}
@@ -4280,7 +4380,7 @@ ${getSourceContext()}
           <button
             type="button"
             onClick={generateMarkingRules}
-            disabled={markingRulesLoading}
+            disabled={markingRulesLoading || isCreditsDepleted}
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-600 disabled:bg-slate-300"
           >
             {markingRulesLoading ? <LoaderCircle size={14} className="animate-spin" /> : <ShieldCheck size={14} />}
@@ -4400,7 +4500,7 @@ ${getSourceContext()}
           <button
             type="button"
             onClick={generateTopicPredictions}
-            disabled={topicPredictorLoading}
+            disabled={topicPredictorLoading || isCreditsDepleted}
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-500 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-600 disabled:bg-slate-300"
           >
             {topicPredictorLoading ? <LoaderCircle size={14} className="animate-spin" /> : <TrendingUp size={14} />}
