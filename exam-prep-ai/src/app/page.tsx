@@ -2011,14 +2011,81 @@ export default function Home() {
     return true;
   };
 
-  const buildMockPaperPreviewExportHtml = (fileNameBase: string) => {
+  const buildMockPaperPreviewExportHtml = (fileNameBase: string, format: "doc" | "pdf") => {
     const previewRoot = mockPaperPreviewRef.current;
     const renderedPages = previewRoot ? Array.from(previewRoot.querySelectorAll<HTMLElement>(".mock-paper-preview-page")) : [];
     if (renderedPages.length === 0) {
       return null;
     }
 
-    const pagesHtml = renderedPages.map((page) => page.outerHTML).join("\n");
+    const cloneWithInlineStyles = (sourceNode: HTMLElement) => {
+      const cloneNode = sourceNode.cloneNode(true) as HTMLElement;
+      const sourceElements = [sourceNode, ...Array.from(sourceNode.querySelectorAll<HTMLElement>("*"))];
+      const cloneElements = [cloneNode, ...Array.from(cloneNode.querySelectorAll<HTMLElement>("*"))];
+
+      const styleProps = [
+        "font-family",
+        "font-size",
+        "font-weight",
+        "font-style",
+        "line-height",
+        "letter-spacing",
+        "text-transform",
+        "text-decoration",
+        "text-align",
+        "color",
+        "background-color",
+        "margin-top",
+        "margin-right",
+        "margin-bottom",
+        "margin-left",
+        "padding-top",
+        "padding-right",
+        "padding-bottom",
+        "padding-left",
+        "border-top",
+        "border-right",
+        "border-bottom",
+        "border-left",
+        "border-radius",
+        "width",
+        "max-width",
+        "min-height",
+        "height",
+        "display",
+        "white-space",
+        "list-style-type",
+        "list-style-position",
+        "box-sizing",
+      ] as const;
+
+      sourceElements.forEach((sourceEl, index) => {
+        const targetEl = cloneElements[index];
+        if (!targetEl) {
+          return;
+        }
+
+        const computed = window.getComputedStyle(sourceEl);
+        const inlineStyles = styleProps
+          .map((prop) => `${prop}:${computed.getPropertyValue(prop)};`)
+          .join("");
+
+        targetEl.setAttribute("style", inlineStyles + (targetEl.getAttribute("style") ?? ""));
+      });
+
+      return cloneNode;
+    };
+
+    const pagesHtml = renderedPages
+      .map((page, index) => {
+        const clonedPage = cloneWithInlineStyles(page);
+        const separator =
+          format === "doc" && index < renderedPages.length - 1
+            ? '<div style="mso-page-break-after:always;page-break-after:always;height:0;line-height:0;"></div>'
+            : "";
+        return `${clonedPage.outerHTML}${separator}`;
+      })
+      .join("\n");
     const headStyles = Array.from(document.querySelectorAll("style, link[rel='stylesheet']"))
       .map((node) => node.outerHTML)
       .join("\n");
@@ -2029,6 +2096,9 @@ export default function Home() {
       .export-wrap { max-width: 860px; margin: 18px auto; padding: 0 8px 18px; }
       .mock-paper-preview-page { box-sizing: border-box; width: ${MOCK_PAPER_A4_WIDTH_PX}px; max-width: ${MOCK_PAPER_A4_WIDTH_PX}px; height: ${MOCK_PAPER_A4_HEIGHT_PX}px; min-height: ${MOCK_PAPER_A4_HEIGHT_PX}px; aspect-ratio: 210 / 297; page-break-after: always; overflow: hidden; }
       .mock-paper-preview-page:last-child { page-break-after: auto; }
+      @media all {
+        .mock-paper-preview-page { break-after: page; }
+      }
       @media print {
         body { background: #fff; }
         .export-wrap { max-width: none; margin: 0; padding: 0; }
@@ -2044,7 +2114,7 @@ export default function Home() {
     }
 
     const fileNameBase = "Generated Mock Paper";
-    const previewHtml = buildMockPaperPreviewExportHtml(fileNameBase);
+    const previewHtml = buildMockPaperPreviewExportHtml(fileNameBase, format);
     let ok = false;
 
     if (previewHtml) {
