@@ -746,6 +746,7 @@ export default function Home() {
   const lastAnimatedAssistantId = useRef<string | null>(null);
   const sourcePdfUrlsRef = useRef<Record<string, string>>({});
   const mockPaperPreviewRef = useRef<HTMLDivElement | null>(null);
+  const latestWorkspaceSaveRequestId = useRef(0);
 
   const buildLearnerProfileContext = () => {
     const safeName = learnerName.trim() || "Scholar";
@@ -999,40 +1000,30 @@ export default function Home() {
       },
     };
 
-    const abortController = new AbortController();
-    let active = true;
+    latestWorkspaceSaveRequestId.current += 1;
+    const requestId = latestWorkspaceSaveRequestId.current;
     setAutoSaveStatus("saving");
 
     void fetch("/api/workspace", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
-      signal: abortController.signal,
     })
       .then((response) => {
-        if (!active) {
+        if (requestId !== latestWorkspaceSaveRequestId.current) {
           return;
         }
 
         setAutoSaveStatus(response.ok ? "saved" : "error");
       })
-      .catch((error) => {
-        if (!active) {
-          return;
-        }
-
-        if (error instanceof DOMException && error.name === "AbortError") {
+      .catch(() => {
+        if (requestId !== latestWorkspaceSaveRequestId.current) {
           return;
         }
 
         setAutoSaveStatus("error");
         // Keep autosave silent; next user action retries automatically.
     });
-
-    return () => {
-      active = false;
-      abortController.abort();
-    };
   }, [
     isAuthenticated,
     workspaceReadyToSave,
