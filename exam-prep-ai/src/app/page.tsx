@@ -79,6 +79,7 @@ const A4_RATIO_PORTRAIT = Math.SQRT2;
 const MOCK_PAPER_A4_WIDTH_PX = 794;
 const MOCK_PAPER_A4_HEIGHT_PX = Math.round(MOCK_PAPER_A4_WIDTH_PX * A4_RATIO_PORTRAIT);
 const WORKSPACE_LOCAL_STORAGE_KEY_PREFIX = "examos-workspace";
+const PDFJS_WORKER_CDN = "https://unpkg.com/pdfjs-dist@5.6.205/legacy/build/pdf.worker.min.mjs";
 const TOOL_CREDIT_COSTS = {
   timedSection: 0,
   parsePdf: 1,
@@ -620,6 +621,14 @@ export default function Home() {
     text: string;
     selected: boolean;
   };
+  type TemplateLayoutProfile = {
+    pageCount: number;
+    dominantFontFamily: string;
+    dominantFontSize: number;
+    medianLineSpacing: number;
+    pageLineDensity: number[];
+    boldRatio: number;
+  };
   type PersistedCover = {
     learnerName: string;
     examDateInput: string;
@@ -737,6 +746,7 @@ export default function Home() {
   const [strictTemplateReplicaMode, setStrictTemplateReplicaMode] = useState(true);
   const [mockPaperPreviewZoom, setMockPaperPreviewZoom] = useState(100);
   const [sourcePdfUrls, setSourcePdfUrls] = useState<Record<string, string>>({});
+  const [templateLayoutProfiles, setTemplateLayoutProfiles] = useState<Record<string, TemplateLayoutProfile>>({});
   const [showTemplateUnderlay, setShowTemplateUnderlay] = useState(true);
   const [gradingExportFormat, setGradingExportFormat] = useState<"doc" | "pdf">("doc");
   const [gradingFeedbackDraft, setGradingFeedbackDraft] = useState("");
@@ -777,6 +787,116 @@ export default function Home() {
   const sourcePdfUrlsRef = useRef<Record<string, string>>({});
   const mockPaperPreviewRef = useRef<HTMLDivElement | null>(null);
   const latestWorkspaceSaveRequestId = useRef(0);
+
+  const computeMedian = (values: number[]) => {
+    if (values.length === 0) {
+      return 0;
+    }
+    const sorted = [...values].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    return sorted.length % 2 === 0 ? (sorted[mid - 1] + sorted[mid]) / 2 : sorted[mid];
+  };
+
+  const analyzeTemplateLayoutFromPdf = async (file: File): Promise<TemplateLayoutProfile | null> => {
+    try {
+      const pdfjsLib = (await import("pdfjs-dist/legacy/build/pdf.mjs")) as {
+        getDocument: (input: { data: ArrayBuffer }) => { promise: Promise<unknown> };
+        GlobalWorkerOptions: { workerSrc: string };
+      };
+
+      if (!pdfjsLib.GlobalWorkerOptions.workerSrc) {
+        pdfjsLib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER_CDN;
+      }
+
+      const data = await file.arrayBuffer();
+      const loadingTask = pdfjsLib.getDocument({ data });
+      const pdf = (await loadingTask.promise) as {
+        numPages: number;
+        getPage: (pageNumber: number) => Promise<{ getTextContent: () => Promise<unknown> }>;
+      };
+
+      const fontFamilyWeights = new Map<string, number>();
+      const fontSizes: number[] = [];
+      const lineSpacings: number[] = [];
+      const pageLineDensity: number[] = [];
+      let totalChars = 0;
+      let boldChars = 0;
+
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber += 1) {
+        const page = await pdf.getPage(pageNumber);
+        const textContent = (await page.getTextContent()) as {
+          items?: Array<{ str?: string; fontName?: string; transform?: number[]; height?: number }>;
+          styles?: Record<string, { fontFamily?: string }>;
+        };
+
+        const items = textContent.items ?? [];
+        const styles = textContent.styles ?? {};
+        const yPositions: number[] = [];
+
+        for (const item of items) {
+          const raw = item.str ?? "";
+          const text = raw.trim();
+          if (!text) {
+            continue;
+          }
+
+          const charWeight = Math.max(1, text.length);
+          const style = item.fontName ? styles[item.fontName] : undefined;
+          const fontFamily = (style?.fontFamily || item.fontName || "Unknown").trim();
+          fontFamilyWeights.set(fontFamily, (fontFamilyWeights.get(fontFamily) ?? 0) + charWeight);
+
+          const sizeCandidate = Math.abs(item.transform?.[3] ?? item.height ?? 0);
+          if (sizeCandidate >= 6 && sizeCandidate <= 40) {
+            fontSizes.push(sizeCandidate);
+          }
+
+          const y = item.transform?.[5];
+          if (typeof y === "number" && Number.isFinite(y)) {
+            yPositions.push(y);
+          }
+
+          totalChars += charWeight;
+          if (/bold|black|heavy|semibold|demi/i.test(fontFamily)) {
+            boldChars += charWeight;
+          }
+        }
+
+        const uniqueY = Array.from(new Set(yPositions.map((value) => Number(value.toFixed(2))))).sort((a, b) => b - a);
+        pageLineDensity.push(uniqueY.length);
+
+        for (let i = 0; i < uniqueY.length - 1; i += 1) {
+          const gap = Math.abs(uniqueY[i] - uniqueY[i + 1]);
+          if (gap >= 6 && gap <= 40) {
+            lineSpacings.push(gap);
+          }
+        }
+      }
+
+      let dominantFontFamily = "Times New Roman";
+      let maxWeight = 0;
+      fontFamilyWeights.forEach((weight, family) => {
+        if (weight > maxWeight) {
+          maxWeight = weight;
+          dominantFontFamily = family;
+        }
+      });
+
+      const dominantFontSize = Number(computeMedian(fontSizes).toFixed(2)) || 11.5;
+      const medianLineSpacing = Number(computeMedian(lineSpacings).toFixed(2)) || Number((dominantFontSize * 1.35).toFixed(2));
+      const boldRatio = totalChars > 0 ? Number((boldChars / totalChars).toFixed(4)) : 0;
+
+      return {
+        pageCount: pdf.numPages,
+        dominantFontFamily,
+        dominantFontSize,
+        medianLineSpacing,
+        pageLineDensity,
+        boldRatio,
+      };
+    } catch {
+      return null;
+    }
+  };
 
   const buildLearnerProfileContext = () => {
     const safeName = learnerName.trim() || "Scholar";
@@ -950,6 +1070,7 @@ export default function Home() {
       setParseDiagnostics(null);
       setSourceLibrary(nextSources);
       setSourcePdfUrls({});
+      setTemplateLayoutProfiles({});
       setActiveSourceId(persistedActiveId);
       setSourceText(
         typeof workspace.sourceText === "string"
@@ -1426,9 +1547,13 @@ export default function Home() {
         };
 
         const pdfUrl = URL.createObjectURL(file);
+        const layoutProfile = await analyzeTemplateLayoutFromPdf(file);
 
         setSourceLibrary((previous) => [...previous, newSource]);
         setSourcePdfUrls((previous) => ({ ...previous, [newSource.id]: pdfUrl }));
+        if (layoutProfile) {
+          setTemplateLayoutProfiles((previous) => ({ ...previous, [newSource.id]: layoutProfile }));
+        }
         setSourceText(parsedText);
         await deductCredits(TOOL_CREDIT_COSTS.parsePdf, "Upload + Parse PDF");
       } catch (error) {
@@ -1714,6 +1839,40 @@ export default function Home() {
     };
   };
 
+  const getTemplateLayoutHint = () => {
+    if (!templateLayoutProfile) {
+      return { hasLayoutHint: false, layoutHint: "", templatePageCount: 0 };
+    }
+
+    const lineHeightRatio =
+      templateLayoutProfile.dominantFontSize > 0
+        ? Number((templateLayoutProfile.medianLineSpacing / templateLayoutProfile.dominantFontSize).toFixed(2))
+        : 1.35;
+
+    const densitySummary = templateLayoutProfile.pageLineDensity
+      .slice(0, 12)
+      .map((count, index) => `Page ${index + 1}: ${count} text lines`)
+      .join("; ");
+
+    const layoutHint = [
+      `- Template page count: ${templateLayoutProfile.pageCount}`,
+      `- Dominant font family: ${templateLayoutProfile.dominantFontFamily}`,
+      `- Dominant font size (pt-equivalent): ${templateLayoutProfile.dominantFontSize}`,
+      `- Median line spacing (pt-equivalent): ${templateLayoutProfile.medianLineSpacing}`,
+      `- Implied line-height ratio: ${lineHeightRatio}`,
+      `- Bold text density ratio: ${templateLayoutProfile.boldRatio}`,
+      densitySummary ? `- Per-page line density profile: ${densitySummary}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+
+    return {
+      hasLayoutHint: true,
+      layoutHint,
+      templatePageCount: templateLayoutProfile.pageCount,
+    };
+  };
+
   const getMockPaperPages = (content: string) => {
     const parts = content
       .split(/\n\s*\[\[PAGE_BREAK\]\]\s*\n/gi)
@@ -1790,7 +1949,7 @@ export default function Home() {
     }
 
     if (strictTemplateReplicaMode) {
-      const templatePageCount = getTemplateReplicaBlueprint().pageCount;
+      const templatePageCount = templateLayoutProfile?.pageCount ?? getTemplateReplicaBlueprint().pageCount;
       if (templatePageCount > 1) {
         const allLines = merged.split("\n");
         const chunkSize = Math.max(1, Math.ceil(allLines.length / templatePageCount));
@@ -2014,6 +2173,7 @@ export default function Home() {
 
     const { hasTemplate, templateHint } = getPastPaperTemplateHint();
     const { hasBlueprint, blueprint, pageCount: templatePageCount } = getTemplateReplicaBlueprint();
+    const { hasLayoutHint, layoutHint, templatePageCount: layoutPageCount } = getTemplateLayoutHint();
 
     const prompt = `
 You are an examiner creating a printable mock exam paper from uploaded sources.
@@ -2037,6 +2197,12 @@ ${
   hasBlueprint
     ? `Template blueprint excerpt (copy structure/style tokens exactly, only vary content):\n${blueprint}`
     : "Template blueprint excerpt unavailable."
+}
+
+${
+  hasLayoutHint
+    ? `Template typography/layout profile from uploaded PDF (mirror this closely):\n${layoutHint}`
+    : "Template typography/layout profile unavailable."
 }
 
 Output requirements (printable template):
@@ -2063,8 +2229,9 @@ Formatting rules:
 - Insert page separators using exactly: [[PAGE_BREAK]] between pages.
 - Keep each page length balanced for print readability.
 - When template cues are present, do not invent a new format. Reuse template skeleton and only replace content.
-- Target page count: close to ${templatePageCount > 0 ? templatePageCount : "source template"} when feasible, but allow variation if content quality requires it.
+- Target page count: close to ${layoutPageCount > 0 ? layoutPageCount : templatePageCount > 0 ? templatePageCount : "source template"} when feasible, but allow variation if content quality requires it.
 - If STRICT mode is enabled: keep major headings and section blocks highly similar to source template, but allow minor structural adjustments.
+- If typography/layout profile is available, keep font family style, font-size scale, line spacing rhythm, and per-page text density close to that profile.
 
 Source document markdown:
 ${getSourceContext()}
@@ -2126,6 +2293,7 @@ ${topicContext}
 
     const { hasTemplate, templateHint } = getPastPaperTemplateHint();
     const { hasBlueprint, blueprint, pageCount: templatePageCount } = getTemplateReplicaBlueprint();
+    const { hasLayoutHint, layoutHint, templatePageCount: layoutPageCount } = getTemplateLayoutHint();
 
     const prompt = `
 You are editing an existing mock exam paper.
@@ -2152,6 +2320,12 @@ ${
     : "Template blueprint excerpt unavailable."
 }
 
+${
+  hasLayoutHint
+    ? `Template typography/layout profile from uploaded PDF (mirror this closely):\n${layoutHint}`
+    : "Template typography/layout profile unavailable."
+}
+
 User edit request:
 ${instruction}
 
@@ -2162,7 +2336,8 @@ Source context:
 ${getSourceContext()}
 
 Return ONLY the full updated mock paper in markdown.
-- Keep target page count close to template when feasible, but variation is allowed if needed for coherent content.
+- Keep target page count close to ${layoutPageCount > 0 ? layoutPageCount : templatePageCount > 0 ? templatePageCount : "template"} when feasible, but variation is allowed if needed for coherent content.
+- Keep per-page density and typography rhythm aligned with template layout profile when available.
 `.trim();
 
     try {
@@ -2741,6 +2916,7 @@ ${getSourceContext()}
     setSourceText("");
     setSourceLibrary([]);
     setSourcePdfUrls({});
+    setTemplateLayoutProfiles({});
     setActiveSourceId(null);
     setParseDiagnostics(null);
     setIsParsing(false);
@@ -3089,6 +3265,21 @@ ${getSourceContext()}
     : Math.max(0, Math.min(userCredits, FREE_TRIAL_CREDIT_LIMIT));
   const creditBarPercent = (cappedCredits / FREE_TRIAL_CREDIT_LIMIT) * 100;
   const previewScale = Math.max(0.5, Math.min(1.25, mockPaperPreviewZoom / 100));
+  const previewTemplateSource =
+    sourceLibrary.find((item) => item.selected && item.role === "question-paper" && sourcePdfUrls[item.id]) ??
+    sourceLibrary.find((item) => item.role === "question-paper" && sourcePdfUrls[item.id]) ??
+    null;
+  const previewTemplateLayoutProfile = previewTemplateSource ? templateLayoutProfiles[previewTemplateSource.id] ?? null : null;
+  const templateLineHeightRatio = previewTemplateLayoutProfile
+    ? Number((previewTemplateLayoutProfile.medianLineSpacing / Math.max(1, previewTemplateLayoutProfile.dominantFontSize)).toFixed(2))
+    : 1.6;
+  const mockPaperTypographyStyle = previewTemplateLayoutProfile
+    ? {
+        fontFamily: `${previewTemplateLayoutProfile.dominantFontFamily}, Georgia, "Times New Roman", serif`,
+        fontSize: `${Math.max(9, Math.min(15, previewTemplateLayoutProfile.dominantFontSize))}pt`,
+        lineHeight: Math.max(1.15, Math.min(2, templateLineHeightRatio)),
+      }
+    : undefined;
 
   const teleportToMarketplace = () => {
     setShowCoverPage(false);
@@ -3216,6 +3407,7 @@ ${getSourceContext()}
     sourceLibrary.find((item) => item.role === "question-paper" && sourcePdfUrls[item.id]) ??
     null;
   const templatePreviewPdfUrl = templatePreviewSource ? sourcePdfUrls[templatePreviewSource.id] : null;
+  const templateLayoutProfile = templatePreviewSource ? templateLayoutProfiles[templatePreviewSource.id] ?? null : null;
 
   const setSourceSelected = (id: string, selected: boolean) => {
     setSourceLibrary((previous) => previous.map((item) => (item.id === id ? { ...item, selected } : item)));
@@ -3242,6 +3434,15 @@ ${getSourceContext()}
     }
 
     const nextUrl = URL.createObjectURL(file);
+    void analyzeTemplateLayoutFromPdf(file).then((layoutProfile) => {
+      if (layoutProfile) {
+        setTemplateLayoutProfiles((previous) => ({
+          ...previous,
+          [id]: layoutProfile,
+        }));
+      }
+    });
+
     setSourcePdfUrls((previous) => ({
       ...previous,
       [id]: nextUrl,
@@ -3254,6 +3455,11 @@ ${getSourceContext()}
     if (removedPdfUrl) {
       URL.revokeObjectURL(removedPdfUrl);
       setSourcePdfUrls((previous) => {
+        const next = { ...previous };
+        delete next[id];
+        return next;
+      });
+      setTemplateLayoutProfiles((previous) => {
         const next = { ...previous };
         delete next[id];
         return next;
@@ -4896,7 +5102,10 @@ ${getSourceContext()}
                                     maxWidth: `${MOCK_PAPER_A4_WIDTH_PX}px`,
                                   }}
                                 >
-                                  <div className="mock-paper-preview app-ui-content prose prose-sm max-w-none font-serif leading-relaxed text-slate-800 prose-headings:font-serif prose-p:my-1 prose-li:my-0.5">
+                                  <div
+                                    className="mock-paper-preview app-ui-content prose prose-sm max-w-none font-serif leading-relaxed text-slate-800 prose-headings:font-serif prose-p:my-1 prose-li:my-0.5"
+                                    style={mockPaperTypographyStyle}
+                                  >
                                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{page}</ReactMarkdown>
                                   </div>
                                   <div className="mt-8 border-t border-slate-200 pt-2 text-right text-[11px] text-slate-500">Page {index + 1}</div>
@@ -4906,7 +5115,12 @@ ${getSourceContext()}
                           ))}
                         </div>
                       </div>
-                      <p className="mt-2 text-[11px] text-slate-500">Template fidelity mode: mirrors uploaded past-paper structure, symbols, and page breaks when available.</p>
+                      <p className="mt-2 text-[11px] text-slate-500">
+                        Template fidelity mode: mirrors uploaded past-paper structure, symbols, and page breaks when available.
+                        {previewTemplateLayoutProfile
+                          ? ` Template pages detected: ${previewTemplateLayoutProfile.pageCount}.`
+                          : ""}
+                      </p>
                     </div>
                   </div>
                 </div>
