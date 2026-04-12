@@ -606,7 +606,10 @@ export default function Home() {
   const gradingIsLoading = gradingStatus === "submitted" || gradingStatus === "streaming";
   const [activeView, setActiveView] = useState<AppView>("workspace");
   const [isSourceCollapsed, setIsSourceCollapsed] = useState(false);
+  const [isChatCollapsed, setIsChatCollapsed] = useState(false);
   const [isEngineCollapsed, setIsEngineCollapsed] = useState(false);
+  const [workspaceCompactPane, setWorkspaceCompactPane] = useState<"source" | "chat" | "engine">("source");
+  const [isCompactWorkspace, setIsCompactWorkspace] = useState(false);
   const [showStartupSplash, setShowStartupSplash] = useState(true);
   const [splashStage, setSplashStage] = useState<"idle" | "expand" | "exit">("idle");
   const [showCoverPage, setShowCoverPage] = useState(true);
@@ -709,6 +712,23 @@ export default function Home() {
     }
 
     setAuthError("Google sign-in failed. Please try again.");
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+
+    const updateCompactWorkspace = () => {
+      setIsCompactWorkspace(window.innerWidth < 1280);
+    };
+
+    updateCompactWorkspace();
+    window.addEventListener("resize", updateCompactWorkspace);
+
+    return () => {
+      window.removeEventListener("resize", updateCompactWorkspace);
+    };
   }, []);
 
   useEffect(() => {
@@ -1929,6 +1949,39 @@ ${getSourceContext()}
 
   const renderWorkspaceView = () => (
     <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-visible p-3 md:p-4 lg:flex-row lg:overflow-hidden">
+      {isCompactWorkspace ? (
+        <div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
+          <button
+            type="button"
+            onClick={() => setWorkspaceCompactPane("source")}
+            className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+              workspaceCompactPane === "source" ? "bg-indigo-50 text-indigo-600" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            Source
+          </button>
+          <button
+            type="button"
+            onClick={() => setWorkspaceCompactPane("chat")}
+            className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+              workspaceCompactPane === "chat" ? "bg-indigo-50 text-indigo-600" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            Chat
+          </button>
+          <button
+            type="button"
+            onClick={() => setWorkspaceCompactPane("engine")}
+            className={`rounded-xl px-3 py-2 text-xs font-semibold transition ${
+              workspaceCompactPane === "engine" ? "bg-indigo-50 text-indigo-600" : "bg-slate-50 text-slate-600 hover:bg-slate-100"
+            }`}
+          >
+            Engine
+          </button>
+        </div>
+      ) : null}
+
+      {(!isCompactWorkspace || workspaceCompactPane !== "engine") ? (
       <section className="relative m-0 flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-slate-100 bg-white shadow-sm">
         <header className="flex items-center justify-between border-b border-slate-100 px-4 py-3 md:px-6 md:py-4">
           <div className="flex items-center gap-3">
@@ -1971,11 +2024,19 @@ ${getSourceContext()}
 
         <div
           className={`grid min-h-0 flex-1 grid-cols-1 gap-0 ${
-            isSourceCollapsed ? "lg:grid-cols-[52px_minmax(0,1fr)]" : "lg:grid-cols-2"
+            isCompactWorkspace
+              ? ""
+              : isSourceCollapsed && isChatCollapsed
+                ? "xl:grid-cols-[52px_52px]"
+                : isSourceCollapsed
+                  ? "xl:grid-cols-[52px_minmax(0,1fr)]"
+                  : isChatCollapsed
+                    ? "xl:grid-cols-[minmax(0,1fr)_52px]"
+                    : "xl:grid-cols-2"
           }`}
         >
-          {isSourceCollapsed ? (
-            <div className="hidden border-r border-slate-100 bg-slate-50/40 lg:flex lg:flex-col lg:items-center lg:py-5">
+          {(!isCompactWorkspace || workspaceCompactPane === "source") && isSourceCollapsed ? (
+            <div className="hidden border-r border-slate-100 bg-slate-50/40 xl:flex xl:flex-col xl:items-center xl:py-5">
               <button
                 type="button"
                 onClick={() => setIsSourceCollapsed(false)}
@@ -1985,20 +2046,22 @@ ${getSourceContext()}
                 <ChevronRight size={16} />
               </button>
             </div>
-          ) : (
+          ) : (!isCompactWorkspace || workspaceCompactPane === "source") ? (
             <div className="min-h-0 overflow-y-auto border-r border-slate-100 px-4 py-4 md:px-6 md:py-5">
               <div className="mb-3 flex items-center justify-between">
                 <h2 className="flex items-center gap-2 text-sm font-semibold text-slate-600">
                   <BookOpen size={16} /> Source Panel
                 </h2>
-                <button
-                  type="button"
-                  onClick={() => setIsSourceCollapsed(true)}
-                  className="hidden items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 lg:inline-flex"
-                  aria-label="Minimize source panel"
-                >
-                  <ChevronLeft size={14} /> Minimize
-                </button>
+                {!isCompactWorkspace ? (
+                  <button
+                    type="button"
+                    onClick={() => setIsSourceCollapsed(true)}
+                    className="hidden items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 xl:inline-flex"
+                    aria-label="Minimize source panel"
+                  >
+                    <ChevronLeft size={14} /> Minimize
+                  </button>
+                ) : null}
               </div>
 
               <div
@@ -2091,7 +2154,7 @@ ${getSourceContext()}
                 </div>
               ) : null}
 
-              <div className="min-h-[240px] max-h-[42dvh] overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/70 p-4 lg:h-[calc(100vh-292px)] lg:max-h-none">
+              <div className="min-h-[240px] max-h-[42dvh] overflow-y-auto rounded-xl border border-slate-100 bg-slate-50/70 p-4 xl:h-[calc(100vh-292px)] xl:max-h-none">
                 <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-600">
                   <BookOpen size={16} /> Source View {activeSource ? `- ${sourceRoleLabel[activeSource.role]}` : ""}
                 </h2>
@@ -2106,10 +2169,34 @@ ${getSourceContext()}
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
 
+          {(!isCompactWorkspace || workspaceCompactPane === "chat") && isChatCollapsed ? (
+            <div className="hidden border-l border-slate-100 bg-slate-50/40 xl:flex xl:flex-col xl:items-center xl:py-5">
+              <button
+                type="button"
+                onClick={() => setIsChatCollapsed(false)}
+                className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:bg-slate-50"
+                aria-label="Expand chat panel"
+              >
+                <ChevronLeft size={16} />
+              </button>
+            </div>
+          ) : (!isCompactWorkspace || workspaceCompactPane === "chat") ? (
           <div className="relative min-h-0 px-4 py-4 md:px-6 md:py-5">
-            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-600">Exam AI Chat</h2>
+            <h2 className="mb-3 flex items-center justify-between gap-2 text-sm font-semibold text-slate-600">
+              <span>Exam AI Chat</span>
+              {!isCompactWorkspace ? (
+                <button
+                  type="button"
+                  onClick={() => setIsChatCollapsed(true)}
+                  className="hidden items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-xs font-medium text-slate-600 transition hover:bg-slate-50 xl:inline-flex"
+                  aria-label="Minimize chat panel"
+                >
+                  Minimize <ChevronRight size={14} />
+                </button>
+              ) : null}
+            </h2>
             <div className="min-h-[260px] max-h-[48dvh] overflow-y-auto pb-4 lg:h-[calc(100vh-260px)] lg:max-h-none lg:pb-24">
               {workspaceMessages.length === 0 ? (
                 <div className="rounded-xl border border-dashed border-slate-200 p-5 text-sm text-slate-400">
@@ -2171,12 +2258,17 @@ ${getSourceContext()}
               </form>
             </div>
           </div>
+          ) : null}
         </div>
       </section>
+      ) : null}
 
+      {(!isCompactWorkspace || workspaceCompactPane === "engine") ? (
       <aside
         className={`flex w-full rounded-2xl border border-slate-100 bg-slate-50/70 p-4 transition-all duration-300 lg:h-full ${
-          isEngineCollapsed ? "min-h-[56px] flex-col items-center justify-center" : "flex-col overflow-y-auto p-4 md:p-5 lg:w-[390px]"
+          !isCompactWorkspace && isEngineCollapsed
+            ? "min-h-[56px] flex-col items-center justify-center lg:w-[56px]"
+            : "flex-col overflow-y-auto p-4 md:p-5 lg:w-[390px]"
         }`}
       >
         {isEngineCollapsed ? (
@@ -2266,6 +2358,7 @@ ${getSourceContext()}
           </>
         )}
       </aside>
+      ) : null}
     </div>
   );
 
