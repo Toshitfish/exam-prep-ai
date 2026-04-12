@@ -569,8 +569,27 @@ export default function Home() {
     text: string;
     selected: boolean;
   };
-
-  const SOURCE_STORAGE_KEY = "exam-os:sources:v1";
+  type PersistedCover = {
+    learnerName: string;
+    examDateInput: string;
+    focusSubject: string;
+    streakDays: number;
+    dailyMission: string;
+  };
+  type PersistedDrafts = {
+    gradingAnswer: string;
+    markingRulesDraft: string;
+    answerKeyOutput: string;
+    gradingFeedbackDraft: string;
+    topicPredictorDraft: string;
+  };
+  type PersistedWorkspace = {
+    sourceLibrary: SourceItem[];
+    activeSourceId: string | null;
+    sourceText: string;
+    cover: PersistedCover;
+    drafts: PersistedDrafts;
+  };
 
   const {
     messages: workspaceMessages,
@@ -607,7 +626,6 @@ export default function Home() {
     dailyMission: false,
   });
 
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [sourceText, setSourceText] = useState("");
   const [sourceLibrary, setSourceLibrary] = useState<SourceItem[]>([]);
   const [activeSourceId, setActiveSourceId] = useState<string | null>(null);
@@ -656,9 +674,11 @@ export default function Home() {
   const [authEmailInput, setAuthEmailInput] = useState("");
   const [authPasswordInput, setAuthPasswordInput] = useState("");
   const [authError, setAuthError] = useState<string | null>(null);
+  const hasHydratedWorkspace = useRef(false);
+  const [workspaceReadyToSave, setWorkspaceReadyToSave] = useState(false);
 
   useEffect(() => {
-    if (!session?.user?.name) {
+    if (!session?.user?.name || hasHydratedWorkspace.current) {
       return;
     }
 
@@ -666,81 +686,148 @@ export default function Home() {
   }, [session?.user?.name]);
 
   useEffect(() => {
-    try {
-      const stored = window.localStorage.getItem(SOURCE_STORAGE_KEY);
-      if (!stored) {
-        return;
-      }
-
-      const parsed = JSON.parse(stored) as {
-        sourceLibrary?: Array<Partial<SourceItem>>;
-        activeSourceId?: string | null;
-        sourceText?: string;
-      };
-
-      if (!Array.isArray(parsed.sourceLibrary)) {
-        return;
-      }
-
-      const validRoles: SourceRole[] = ["question-paper", "marking-scheme", "model-answer", "notes"];
-      const savedSources: SourceItem[] = parsed.sourceLibrary
-        .filter(
-          (item): item is Partial<SourceItem> & { id: string; name: string; role: SourceRole; text: string } =>
-            typeof item?.id === "string" &&
-            typeof item.name === "string" &&
-            typeof item.role === "string" &&
-            validRoles.includes(item.role as SourceRole) &&
-            typeof item.text === "string",
-        )
-        .map((item) => ({
-          id: item.id,
-          name: item.name,
-          role: item.role,
-          text: item.text,
-          selected: typeof item.selected === "boolean" ? item.selected : true,
-        }));
-
-      if (savedSources.length === 0) {
-        return;
-      }
-
-      const preferredActiveId =
-        typeof parsed.activeSourceId === "string" && savedSources.some((item) => item.id === parsed.activeSourceId)
-          ? parsed.activeSourceId
-          : savedSources[savedSources.length - 1].id;
-      const activeSourceText =
-        savedSources.find((item) => item.id === preferredActiveId)?.text ?? savedSources[savedSources.length - 1].text;
-
-      setUploadedFile(null);
-      setIsParsing(false);
-      setParseDiagnostics(null);
-      setSourceLibrary(savedSources);
-      setActiveSourceId(preferredActiveId);
-      setSourceText(typeof parsed.sourceText === "string" && parsed.sourceText.trim() ? parsed.sourceText : activeSourceText);
-    } catch {
-      // Ignore malformed local storage data and continue with fresh state.
+    if (!isAuthenticated || !session?.user?.id) {
+      hasHydratedWorkspace.current = false;
+      setWorkspaceReadyToSave(false);
+      return;
     }
-  }, []);
+
+    let cancelled = false;
+
+    const loadWorkspace = async () => {
+      try {
+        const response = await fetch("/api/workspace", { method: "GET" });
+        if (!response.ok) {
+          return;
+        }
+
+        const result = (await response.json()) as {
+          workspace?: {
+            sourceLibrary?: SourceItem[];
+            activeSourceId?: string | null;
+            sourceText?: string | null;
+            cover?: Partial<PersistedCover> | null;
+            drafts?: Partial<PersistedDrafts> | null;
+          } | null;
+        };
+
+        if (cancelled || !result.workspace) {
+          return;
+        }
+
+        const workspace = result.workspace;
+        const validRoles: SourceRole[] = ["question-paper", "marking-scheme", "model-answer", "notes"];
+        const nextSources = Array.isArray(workspace.sourceLibrary)
+          ? workspace.sourceLibrary.filter(
+              (item): item is SourceItem =>
+                typeof item?.id === "string" &&
+                typeof item.name === "string" &&
+                typeof item.role === "string" &&
+                validRoles.includes(item.role as SourceRole) &&
+                typeof item.text === "string" &&
+                typeof item.selected === "boolean",
+            )
+          : [];
+
+        const fallbackSource = nextSources[nextSources.length - 1];
+        const persistedActiveId =
+          typeof workspace.activeSourceId === "string" && nextSources.some((item) => item.id === workspace.activeSourceId)
+            ? workspace.activeSourceId
+            : fallbackSource?.id ?? null;
+
+        setIsParsing(false);
+        setParseDiagnostics(null);
+        setSourceLibrary(nextSources);
+        setActiveSourceId(persistedActiveId);
+        setSourceText(
+          typeof workspace.sourceText === "string"
+            ? workspace.sourceText
+            : nextSources.find((item) => item.id === persistedActiveId)?.text ?? "",
+        );
+
+        if (workspace.cover) {
+          if (typeof workspace.cover.learnerName === "string") setLearnerName(workspace.cover.learnerName);
+          if (typeof workspace.cover.examDateInput === "string") setExamDateInput(workspace.cover.examDateInput);
+          if (typeof workspace.cover.focusSubject === "string") setFocusSubject(workspace.cover.focusSubject);
+          if (typeof workspace.cover.streakDays === "number") setStreakDays(Math.max(0, workspace.cover.streakDays));
+          if (typeof workspace.cover.dailyMission === "string") setDailyMission(workspace.cover.dailyMission);
+        }
+
+        if (workspace.drafts) {
+          if (typeof workspace.drafts.gradingAnswer === "string") setGradingAnswer(workspace.drafts.gradingAnswer);
+          if (typeof workspace.drafts.markingRulesDraft === "string") setMarkingRulesDraft(workspace.drafts.markingRulesDraft);
+          if (typeof workspace.drafts.answerKeyOutput === "string") setAnswerKeyOutput(workspace.drafts.answerKeyOutput);
+          if (typeof workspace.drafts.gradingFeedbackDraft === "string") setGradingFeedbackDraft(workspace.drafts.gradingFeedbackDraft);
+          if (typeof workspace.drafts.topicPredictorDraft === "string") setTopicPredictorDraft(workspace.drafts.topicPredictorDraft);
+        }
+      } finally {
+        if (!cancelled) {
+          hasHydratedWorkspace.current = true;
+          setWorkspaceReadyToSave(true);
+        }
+      }
+    };
+
+    loadWorkspace();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, session?.user?.id]);
 
   useEffect(() => {
-    try {
-      if (sourceLibrary.length === 0) {
-        window.localStorage.removeItem(SOURCE_STORAGE_KEY);
-        return;
-      }
-
-      window.localStorage.setItem(
-        SOURCE_STORAGE_KEY,
-        JSON.stringify({
-          sourceLibrary,
-          activeSourceId,
-          sourceText,
-        }),
-      );
-    } catch {
-      // Ignore storage quota or browser storage errors.
+    if (!isAuthenticated || !workspaceReadyToSave || !hasHydratedWorkspace.current) {
+      return;
     }
-  }, [sourceLibrary, activeSourceId, sourceText]);
+
+    const payload: PersistedWorkspace = {
+      sourceLibrary,
+      activeSourceId,
+      sourceText,
+      cover: {
+        learnerName,
+        examDateInput,
+        focusSubject,
+        streakDays,
+        dailyMission,
+      },
+      drafts: {
+        gradingAnswer,
+        markingRulesDraft,
+        answerKeyOutput,
+        gradingFeedbackDraft,
+        topicPredictorDraft,
+      },
+    };
+
+    const timer = window.setTimeout(() => {
+      void fetch("/api/workspace", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    }, 700);
+
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, [
+    isAuthenticated,
+    workspaceReadyToSave,
+    sourceLibrary,
+    activeSourceId,
+    sourceText,
+    learnerName,
+    examDateInput,
+    focusSubject,
+    streakDays,
+    dailyMission,
+    gradingAnswer,
+    markingRulesDraft,
+    answerKeyOutput,
+    gradingFeedbackDraft,
+    topicPredictorDraft,
+  ]);
 
   const getGreeting = () => {
     const hour = new Date().getHours();
@@ -791,7 +878,6 @@ export default function Home() {
       return;
     }
 
-    setUploadedFile(file);
     setSourceText("");
     setParseDiagnostics(null);
     setIsParsing(true);
@@ -976,27 +1062,6 @@ export default function Home() {
     }
 
     exportTextOutput(content, format, "Topic Predictor");
-  };
-
-  const loadDemoContent = () => {
-    const demoText = `# Demo History Paper (Synthetic)\n\n## Section A: Source-Based Questions\n\n### Source 1 (Speech Excerpt, 1947)\n"We will protect our influence by supporting free nations resisting pressure from armed minorities and outside forces."\n\n### Q1 (4 marks)\nUsing Source 1 and your own knowledge, explain one reason this speech increased tensions between the USA and USSR.\n\n### Source 2 (Political Cartoon Description)\nA cartoon shows two leaders pulling Europe in opposite directions with a rope labelled "Influence".\n\n### Q2 (6 marks)\nHow far does Source 2 suggest that ideology was the main cause of early Cold War conflict?\n\n## Section B: Structured Essay\n\n### Q3 (10 marks)\n"Economic rivalry was more important than military rivalry in causing Cold War conflict in Europe, 1945-1961." How far do you agree?\n\n### Command Terms Seen\n- explain\n- how far\n- using source and own knowledge\n`;
-    const demoSource: SourceItem = {
-      id: `demo-${Date.now()}`,
-      name: "Demo History Paper (Synthetic)",
-      role: "question-paper",
-      text: demoText,
-      selected: true,
-    };
-    setUploadedFile(null);
-    setIsParsing(false);
-    setSourceLibrary([demoSource]);
-    setActiveSourceId(demoSource.id);
-    setSourceText(demoText);
-    setParseDiagnostics(null);
-    setGradingAnswer(
-      "Source 1 increased tensions because the USA openly promised to support countries against communist expansion. The USSR saw this as direct interference near its sphere of influence. Also, economic aid and military support strengthened blocs and made compromise harder.",
-    );
-    setActiveView("workspace");
   };
 
   const requireSource = (channel: "workspace" | "grading") => {
@@ -1535,7 +1600,6 @@ ${getSourceContext()}
   }, [showStartupSplash]);
 
   const clearFile = () => {
-    setUploadedFile(null);
     setSourceText("");
     setSourceLibrary([]);
     setActiveSourceId(null);
@@ -1729,16 +1793,19 @@ ${getSourceContext()}
     "timed-section": { label: "Timer", icon: Timer },
   };
 
-  const vaultItems = [
-    {
-      title: uploadedFile?.name || "HST 2425 2nd UT pp.pdf",
-      subject: "History",
-      completion: uploadedFile ? 68 : 0,
-      status: uploadedFile ? "In Progress" : "Not Started",
-    },
-    { title: "Econs Paper 1 Nov 2024.pdf", subject: "Economics", completion: 82, status: "Reviewed" },
-    { title: "Biology Structured Q2.pdf", subject: "Biology", completion: 44, status: "Needs Practice" },
-  ];
+  const vaultItems = sourceLibrary.map((item) => ({
+    title: item.name,
+    subject:
+      item.role === "question-paper"
+        ? "Question"
+        : item.role === "marking-scheme"
+          ? "Mark Scheme"
+          : item.role === "model-answer"
+            ? "Model"
+            : "Notes",
+    completion: item.text.trim() ? 100 : 0,
+    status: item.selected ? "Active" : "Saved",
+  }));
 
   const navClass = (view: AppView) =>
     `rounded-xl p-2 transition-all ${
@@ -1785,13 +1852,6 @@ ${getSourceContext()}
             <h1 className="text-lg font-semibold text-slate-800">Exam Workspace</h1>
           </div>
           <div className="flex items-center gap-2">
-            <button
-              onClick={loadDemoContent}
-              className="inline-flex items-center rounded-full border border-indigo-200 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 transition hover:bg-indigo-100"
-              type="button"
-            >
-              Load Demo Text
-            </button>
             {sourceLibrary.length > 0 ? (
               <button
                 onClick={clearFile}
@@ -2112,23 +2172,29 @@ ${getSourceContext()}
         <h1 className="mb-1 text-xl font-semibold text-slate-800">Past Paper Vault</h1>
         <p className="mb-6 text-sm text-slate-500">Manage uploaded papers and track revision progress by subject.</p>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-          {vaultItems.map((item) => (
-            <article key={item.title} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="inline-flex rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-600">
-                  {item.subject}
-                </span>
-                <span className="text-xs text-slate-500">{item.status}</span>
-              </div>
-              <h2 className="mb-3 line-clamp-2 text-sm font-semibold text-slate-700">{item.title}</h2>
-              <div className="mb-2 h-2 rounded-full bg-slate-200">
-                <div className="h-2 rounded-full bg-indigo-500" style={{ width: `${item.completion}%` }} />
-              </div>
-              <p className="text-xs text-slate-500">Completion: {item.completion}%</p>
-            </article>
-          ))}
-        </div>
+        {vaultItems.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50/70 p-6 text-sm text-slate-500">
+            No uploaded sources yet. Upload a PDF in Exam Workspace to populate your vault.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {vaultItems.map((item) => (
+              <article key={item.title} className="rounded-xl border border-slate-200 bg-slate-50/70 p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="inline-flex rounded-full bg-indigo-50 px-2.5 py-1 text-xs font-medium text-indigo-600">
+                    {item.subject}
+                  </span>
+                  <span className="text-xs text-slate-500">{item.status}</span>
+                </div>
+                <h2 className="mb-3 line-clamp-2 text-sm font-semibold text-slate-700">{item.title}</h2>
+                <div className="mb-2 h-2 rounded-full bg-slate-200">
+                  <div className="h-2 rounded-full bg-indigo-500" style={{ width: `${item.completion}%` }} />
+                </div>
+                <p className="text-xs text-slate-500">Completion: {item.completion}%</p>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
     </div>
   );

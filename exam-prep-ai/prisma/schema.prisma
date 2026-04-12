@@ -16,8 +16,22 @@ model User {
   passwordHash  String?
   accounts      Account[]
   sessions      Session[]
+  workspace     UserWorkspace?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
+}
+
+model UserWorkspace {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  sourceLibrary Json?
+  activeSourceId String?
+  sourceText    String?
+  cover         Json?
+  drafts        Json?
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
 
 model Account {
