@@ -2502,6 +2502,60 @@ ${getSourceContext()}
     setGradingAnswer("");
   };
 
+  const hardSaveWorkspace = async () => {
+    if (!isAuthenticated || !workspaceReadyToSave || !hasHydratedWorkspace.current) {
+      return;
+    }
+
+    const payload: PersistedWorkspace = {
+      sourceLibrary,
+      activeSourceId,
+      sourceText,
+      cover: {
+        learnerName,
+        examDateInput,
+        focusSubject,
+        streakDays,
+        dailyMission,
+      },
+      drafts: {
+        gradingAnswer,
+        markingRulesDraft,
+        answerKeyOutput,
+        gradingFeedbackDraft,
+        topicPredictorDraft,
+        mockPaperDifficulty,
+        timedSectionName,
+        timedMinutes,
+        showTemplateUnderlay,
+      },
+    };
+
+    latestWorkspaceSaveRequestId.current += 1;
+    const requestId = latestWorkspaceSaveRequestId.current;
+    setAutoSaveStatus("saving");
+
+    try {
+      const response = await fetch("/api/workspace", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+
+      if (requestId !== latestWorkspaceSaveRequestId.current) {
+        return;
+      }
+
+      setAutoSaveStatus(response.ok ? "saved" : "error");
+    } catch {
+      if (requestId !== latestWorkspaceSaveRequestId.current) {
+        return;
+      }
+
+      setAutoSaveStatus("error");
+    }
+  };
+
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (isCreditsDepleted) {
@@ -2928,6 +2982,14 @@ ${getSourceContext()}
                 <h1 className="text-lg font-semibold text-slate-800">Exam Workspace</h1>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => void hardSaveWorkspace()}
+                  disabled={autoSaveStatus === "saving"}
+                  className="inline-flex items-center gap-1 rounded-full border border-indigo-200 bg-indigo-50 px-2.5 py-1 text-[11px] font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <ShieldCheck size={12} /> Hard Save
+                </button>
                 <span className="inline-flex items-center gap-1 rounded-full border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600">
                   {autoSaveStatus === "saving" ? (
                     <LoaderCircle size={12} className="animate-spin text-indigo-500" />

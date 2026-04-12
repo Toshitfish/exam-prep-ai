@@ -22,31 +22,54 @@ const toJsonValue = (value: unknown) => {
   return value as Prisma.InputJsonValue;
 };
 
-export async function GET() {
+const resolveSessionUserId = async () => {
   const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+  if (!session?.user) {
+    return null;
+  }
+
+  if (session.user.id) {
+    return session.user.id;
+  }
+
+  const email = session.user.email?.trim().toLowerCase();
+  if (!email) {
+    return null;
+  }
+
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true },
+  });
+
+  return user?.id ?? null;
+};
+
+export async function GET() {
+  const userId = await resolveSessionUserId();
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const workspace = await prisma.userWorkspace.findUnique({
-    where: { userId: session.user.id },
+    where: { userId },
   });
 
   return NextResponse.json({ workspace });
 }
 
 export async function PUT(req: Request) {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) {
+  const userId = await resolveSessionUserId();
+  if (!userId) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
   const body = (await req.json()) as WorkspacePayload;
 
   const workspace = await prisma.userWorkspace.upsert({
-    where: { userId: session.user.id },
+    where: { userId },
     create: {
-      userId: session.user.id,
+      userId,
       sourceLibrary: toJsonValue(body.sourceLibrary),
       activeSourceId: body.activeSourceId ?? null,
       sourceText: body.sourceText ?? "",
