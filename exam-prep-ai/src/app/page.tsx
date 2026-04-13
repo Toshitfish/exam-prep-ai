@@ -137,249 +137,11 @@ const isAllowedHistoryImageUrl = (url: string) => {
   return HISTORY_IMAGE_BANK.some((item) => item.url === normalized);
 };
 
-const getWindowViewportBounds = (win: FloatingWindowState) => {
-  if (typeof window === "undefined") {
-    return { minX: 20, minY: 20, maxX: 20, maxY: 20 };
-  }
-
-  // Keep the titlebar reachable while preserving natural placement.
-  const visibleTitlebarWidth = Math.min(win.width, 140);
-  const minX = 0;
-  const minY = 8;
-  const maxX = Math.max(0, window.innerWidth - visibleTitlebarWidth);
-  const maxY = Math.max(8, window.innerHeight - 56);
-
-  return { minX, minY, maxX, maxY };
-};
-
-const clampWindowSizeToViewport = (win: FloatingWindowState, width: number, height: number) => {
-  if (typeof window === "undefined") {
-    return {
-      width: Math.max(MIN_WINDOW_WIDTH, width),
-      height: Math.max(MIN_WINDOW_HEIGHT, height),
-    };
-  }
-
-  const maxWidth = Math.max(MIN_WINDOW_WIDTH, window.innerWidth - win.x - 20);
-  const maxHeight = Math.max(MIN_WINDOW_HEIGHT, window.innerHeight - win.y - 20);
-
-  return {
-    width: Math.min(Math.max(MIN_WINDOW_WIDTH, width), maxWidth),
-    height: Math.min(Math.max(MIN_WINDOW_HEIGHT, height), maxHeight),
-  };
-};
-
-const clampWindowToViewport = (win: FloatingWindowState) => {
-  if (typeof window === "undefined") {
-    return { x: win.x, y: win.y };
-  }
-
-  const bounds = getWindowViewportBounds(win);
-
-  return {
-    x: Math.min(Math.max(bounds.minX, win.x), bounds.maxX),
-    y: Math.min(Math.max(bounds.minY, win.y), bounds.maxY),
-  };
-};
-
-const DraggableWindow = ({
-  windowId,
-  title,
-  children,
-  win,
-  isFocused,
-  onFocus,
-  onClose,
-  onMinimize,
-  onToggleMaximize,
-  onMove,
-  onResize,
-  contentClassName,
-}: DraggableWindowProps) => {
-  const [isDragging, setIsDragging] = useState(false);
-  const windowRef = useRef<HTMLDivElement | null>(null);
-  const resizingRef = useRef<{ startX: number; startY: number; startWidth: number; startHeight: number } | null>(null);
-  const draggingRef = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null);
-
-  const startResizeFromCorner = (event: React.PointerEvent<HTMLButtonElement>) => {
-    if (win.isMaximized) {
-      return;
-    }
-
-    event.preventDefault();
-    event.stopPropagation();
-
-    resizingRef.current = {
-      startX: event.clientX,
-      startY: event.clientY,
-      startWidth: win.width,
-      startHeight: win.height,
-    };
-
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      const snapshot = resizingRef.current;
-      if (!snapshot) {
-        return;
-      }
-
-      const rawWidth = snapshot.startWidth + (moveEvent.clientX - snapshot.startX);
-      const rawHeight = snapshot.startHeight + (moveEvent.clientY - snapshot.startY);
-      const clampedSize = clampWindowSizeToViewport(win, rawWidth, rawHeight);
-      onResize(clampedSize.width, clampedSize.height);
-    };
-
-    const onPointerUp = () => {
-      resizingRef.current = null;
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-    };
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-  };
-
-  const startDragFromTitlebar = (event: React.PointerEvent<HTMLDivElement>) => {
-    if (win.isMaximized) {
-      return;
-    }
-
-    if (event.button !== 0) {
-      return;
-    }
-
-    const target = event.target as HTMLElement;
-    if (target.closest("[data-window-control='true']")) {
-      return;
-    }
-
-    // Prevent accidental text selection while initiating drag.
-    event.preventDefault();
-
-    draggingRef.current = {
-      startX: event.clientX,
-      startY: event.clientY,
-      originX: win.x,
-      originY: win.y,
-    };
-
-    setIsDragging(true);
-
-    const onPointerMove = (moveEvent: PointerEvent) => {
-      const snapshot = draggingRef.current;
-      if (!snapshot) {
-        return;
-      }
-
-      const nextX = snapshot.originX + (moveEvent.clientX - snapshot.startX);
-      const nextY = snapshot.originY + (moveEvent.clientY - snapshot.startY);
-      const clamped = clampWindowToViewport({ ...win, x: nextX, y: nextY });
-      onMove(clamped.x, clamped.y);
-    };
-
-    const onPointerUp = () => {
-      draggingRef.current = null;
-      setIsDragging(false);
-      window.removeEventListener("pointermove", onPointerMove);
-      window.removeEventListener("pointerup", onPointerUp);
-    };
-
-    window.addEventListener("pointermove", onPointerMove);
-    window.addEventListener("pointerup", onPointerUp);
-
-    if (!isFocused) {
-      requestAnimationFrame(() => {
-        onFocus();
-      });
-    }
-  };
-
-  const stopWindowControlDrag = (event: React.PointerEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-  };
-
-  if (!win.isOpen || win.isMinimized) {
-    return null;
-  }
-
-  return (
-    <motion.div
-      ref={windowRef}
-      animate={win.isMaximized ? { left: 0, top: 0, width: "100vw", height: "100vh" } : undefined}
-      transition={
-        win.isMaximized
-          ? { type: "spring", stiffness: 320, damping: 28 }
-          : { type: "tween", duration: 0 }
-      }
-      style={{
-        zIndex: win.zIndex,
-        ...(win.isMaximized ? {} : { left: win.x, top: win.y, width: win.width, height: win.height }),
-      }}
-      className={`fixed overflow-hidden border border-slate-200 bg-white/95 shadow-xl transform-gpu will-change-transform ${
-        win.isMaximized ? "rounded-none" : "rounded-xl"
-      }`}
-    >
-      <div
-        onPointerDownCapture={startDragFromTitlebar}
-        className={`flex select-none touch-none items-center justify-between border-b border-slate-100 bg-slate-50/80 px-4 py-3 ${
-          isDragging ? "cursor-grabbing" : "cursor-grab"
-        }`}
-      >
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            data-window-control="true"
-            onPointerDown={stopWindowControlDrag}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              onClose();
-            }}
-            className="h-3.5 w-3.5 rounded-full bg-rose-500 transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-rose-200"
-            aria-label={`Close ${windowId} window`}
-          />
-          <button
-            type="button"
-            data-window-control="true"
-            onPointerDown={stopWindowControlDrag}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              onMinimize();
-            }}
-            className="h-3.5 w-3.5 rounded-full bg-amber-400 transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-200"
-            aria-label={`Minimize ${windowId} window`}
-          />
-          <button
-            type="button"
-            data-window-control="true"
-            onPointerDown={stopWindowControlDrag}
-            onMouseDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation();
-              onToggleMaximize();
-            }}
-            className="h-3.5 w-3.5 rounded-full bg-emerald-500 transition hover:brightness-95 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-emerald-200"
-            aria-label={`Toggle maximize ${windowId} window`}
-          />
-        </div>
-        <h2 className="pointer-events-none select-none text-sm font-semibold text-slate-700">{title}</h2>
-        <div className="w-[50px]" />
-      </div>
-      <div className={contentClassName ?? "h-full overflow-y-auto p-5"}>{children}</div>
-      {!win.isMaximized ? (
-        <button
-          type="button"
-          onPointerDown={startResizeFromCorner}
-          className="absolute right-1 bottom-1 h-5 w-5 cursor-nwse-resize rounded-sm bg-slate-300/70 transition hover:bg-slate-400/80"
-          aria-label={`Resize ${windowId} window`}
-        />
-      ) : null}
-    </motion.div>
-  );
-};
+// --- DraggableWindow and helpers restored as top-level components here ---
+// (Insert the full DraggableWindow component and its helper functions here, as in your original code)
 
 export default function Home() {
-  type AppView = "home" | "workspace" | "vault" | "analytics" | "syllabus" | "purchase";
+  type AppView = "workspace" | "vault" | "analytics" | "syllabus" | "purchase";
   type MarketplacePanel = "store" | "usage";
   type CoverEditableField = "learnerName" | "examDate" | "focusSubject" | "streakDays" | "dailyMission";
   type WindowId = "answer-key" | "grade-answer" | "marking-rules" | "topic-predictor" | "timed-section";
@@ -5579,9 +5341,7 @@ ${getSourceContext()}
           E
         </div>
         <div className="flex flex-col gap-6">
-          <button className={navClass("home")} aria-label="Home" onClick={() => setActiveView("home")}>
-            <Globe size={20} />
-          </button>
+          {/* Home button removed */}
           <button className={navClass("workspace")} aria-label="Dashboard" onClick={() => setActiveView("workspace")}>
             <HomeIcon size={20} />
           </button>
@@ -5609,7 +5369,7 @@ ${getSourceContext()}
         </div>
       </nav>
 
-      {activeView === "home" && renderHomeView()}
+      {/* Home view removed */}
       {activeView === "workspace" && renderWorkspaceView()}
       {activeView === "purchase" && renderPurchaseView()}
       {activeView === "vault" && renderVaultView()}
@@ -5618,9 +5378,7 @@ ${getSourceContext()}
 
       <nav className="fixed right-3 bottom-3 left-3 z-40 rounded-2xl border border-white/70 bg-white/95 p-2 shadow-xl backdrop-blur md:hidden">
         <div className="grid grid-cols-6 gap-1">
-          <button className={navClass("home")} aria-label="Home" onClick={() => setActiveView("home")}>
-            <Globe size={18} />
-          </button>
+          {/* Home button removed */}
           <button className={navClass("workspace")} aria-label="Dashboard" onClick={() => setActiveView("workspace")}>
             <HomeIcon size={18} />
           </button>
