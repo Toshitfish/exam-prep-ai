@@ -80,6 +80,7 @@ const MOCK_PAPER_A4_WIDTH_PX = 794;
 const MOCK_PAPER_A4_HEIGHT_PX = Math.round(MOCK_PAPER_A4_WIDTH_PX * A4_RATIO_PORTRAIT);
 const WORKSPACE_LOCAL_STORAGE_KEY_PREFIX = "examos-workspace";
 const PDFJS_WORKER_CDN = "https://unpkg.com/pdfjs-dist@5.6.205/legacy/build/pdf.worker.min.mjs";
+const MATHJAX_CDN = "https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js";
 const HTML2CANVAS_CDN = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
 const JSPDF_CDN = "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js";
 const TOOL_CREDIT_COSTS = {
@@ -1915,11 +1916,7 @@ export default function Home() {
     };
 
     for (const line of lines) {
-      const isHardSectionBoundary = /^(Section\s+[A-Z0-9]|Mark\s*Scheme|Instructions\s+to\s+Candidates|Question\s*\d+)/i.test(
-        line.trim(),
-      );
-
-      if (currentPage.length >= maxLinesPerPage || (isHardSectionBoundary && currentPage.length >= Math.floor(maxLinesPerPage * 0.65))) {
+      if (currentPage.length >= maxLinesPerPage) {
         pushPage();
       }
 
@@ -1930,8 +1927,24 @@ export default function Home() {
     return pages.join("\n\n[[PAGE_BREAK]]\n\n");
   };
 
+  const formatMockPaperControlTokens = (text: string) => {
+    if (!text.trim()) {
+      return "";
+    }
+
+    const normalizedPageBreaks = text.replace(/\[(?:\[)?PAGE_BREAK(?:\])?\]/gi, "[[PAGE_BREAK]]");
+
+    return normalizedPageBreaks.replace(/\[LINES:\s*(\d+)\]/gi, (_, value) => {
+      const lineCount = Math.max(1, Math.min(30, Number.parseInt(value, 10) || 0));
+      const line = "____________________________________________________________";
+      const block = Array.from({ length: lineCount }, () => line).join("\n");
+      return `\n\n${block}\n\n`;
+    });
+  };
+
   const normalizeMockPaperOutput = (content: string) => {
-    const normalized = content.replace(/\r\n/g, "\n").trim();
+    const tokenFormatted = formatMockPaperControlTokens(content);
+    const normalized = tokenFormatted.replace(/\r\n/g, "\n").trim();
     if (!normalized) {
       return "";
     }
@@ -1955,10 +1968,6 @@ export default function Home() {
       if (templatePageCount > 1) {
         const allLines = merged.split("\n");
         const chunkedPages: string[] = [];
-        const isBoundaryLine = (line: string) =>
-          /^(Section\s+[A-Z0-9]|Question\s*\d+|Q\d+|Mark\s*Scheme|Instructions\s+to\s+Candidates|Part\s+[A-Z0-9]|Source\s+[A-Z0-9])/i.test(
-            line.trim(),
-          );
 
         let cursor = 0;
 
@@ -1972,26 +1981,7 @@ export default function Home() {
           let end = allLines.length;
           if (remainingPages > 1) {
             const targetEnd = cursor + Math.max(1, Math.ceil(remainingLines / remainingPages));
-            const searchStart = Math.max(cursor + 8, targetEnd - 14);
-            const searchEnd = Math.min(allLines.length - 1, targetEnd + 14);
-
-            let bestBoundary = -1;
-            let bestDistance = Number.POSITIVE_INFINITY;
-
-            for (let pos = searchStart; pos <= searchEnd; pos += 1) {
-              const candidate = allLines[pos] ?? "";
-              if (!isBoundaryLine(candidate)) {
-                continue;
-              }
-
-              const distance = Math.abs(pos - targetEnd);
-              if (distance < bestDistance) {
-                bestBoundary = pos;
-                bestDistance = distance;
-              }
-            }
-
-            end = bestBoundary > cursor + 4 ? bestBoundary : targetEnd;
+            end = targetEnd;
           }
 
           const chunk = allLines.slice(cursor, end).join("\n").trim();
@@ -2163,11 +2153,15 @@ export default function Home() {
     const pagesHtml = renderedPages
       .map((page, index) => {
         const clonedPage = cloneWithInlineStyles(page);
-        const separator =
-          format === "doc" && index < renderedPages.length - 1
-            ? '<div style="mso-page-break-after:always;page-break-after:always;height:0;line-height:0;"></div>'
+        const beforeBreak =
+          format === "doc" && index > 0
+            ? '<div style="mso-page-break-before:always;page-break-before:always;break-before:page;height:0;line-height:0;"></div>'
             : "";
-        return `${clonedPage.outerHTML}${separator}`;
+        const afterBreak =
+          format === "doc" && index < renderedPages.length - 1
+            ? '<div style="mso-page-break-after:always;page-break-after:always;break-after:page;height:0;line-height:0;"></div>'
+            : "";
+        return `${beforeBreak}<section class="export-page-shell">${clonedPage.outerHTML}</section>${afterBreak}`;
       })
       .join("\n");
     const headStyles = Array.from(document.querySelectorAll("style, link[rel='stylesheet']"))
@@ -2205,6 +2199,8 @@ export default function Home() {
       @page { size: A4 portrait; margin: 10mm; }
       body { margin: 0; background: #eef2f7; }
       .export-wrap { max-width: 860px; margin: 18px auto; padding: 0 8px 18px; }
+      .export-page-shell { page-break-after: always; break-after: page; }
+      .export-page-shell:last-child { page-break-after: auto; break-after: auto; }
       .mock-paper-preview-page { box-sizing: border-box; width: ${MOCK_PAPER_A4_WIDTH_PX}px; max-width: ${MOCK_PAPER_A4_WIDTH_PX}px; height: ${MOCK_PAPER_A4_HEIGHT_PX}px; min-height: ${MOCK_PAPER_A4_HEIGHT_PX}px; aspect-ratio: 210 / 297; page-break-after: always; overflow: hidden; }
       .mock-paper-preview-page:last-child { page-break-after: auto; }
       @media all { .mock-paper-preview-page { break-after: page; } }
@@ -2233,9 +2229,63 @@ export default function Home() {
       document.head.appendChild(script);
     });
 
+  useEffect(() => {
+    if (isEditingAnswerKeyOutput || !answerKeyOutput.trim()) {
+      return;
+    }
+
+    let cancelled = false;
+
+    const typesetMath = async () => {
+      try {
+        const runtime = window as Window & {
+          MathJax?: {
+            typesetClear?: (elements?: HTMLElement[]) => void;
+            typesetPromise?: (elements?: HTMLElement[]) => Promise<void>;
+            startup?: { defaultPageReady?: () => Promise<void> };
+          };
+        };
+
+        if (!runtime.MathJax) {
+          (window as Window & { MathJax?: unknown }).MathJax = {
+            tex: {
+              inlineMath: [["$", "$"], ["\\(", "\\)"]],
+              displayMath: [["$$", "$$"], ["\\[", "\\]"]],
+            },
+            svg: { fontCache: "global" },
+            startup: { typeset: false },
+          };
+        }
+
+        await loadExternalScript(MATHJAX_CDN, "mathjax-cdn");
+        if (cancelled) {
+          return;
+        }
+
+        const target = mockPaperPreviewRef.current;
+        if (!target) {
+          return;
+        }
+
+        runtime.MathJax?.typesetClear?.([target]);
+        await runtime.MathJax?.typesetPromise?.([target]);
+      } catch {
+        // Keep preview usable even if MathJax CDN is unavailable.
+      }
+    };
+
+    void typesetMath();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [answerKeyOutput, isEditingAnswerKeyOutput, mockPaperPreviewZoom]);
+
   const exportMockPaperPdfFile = async (fileNameBase: string) => {
     const previewRoot = mockPaperPreviewRef.current;
     const renderedPages = previewRoot ? Array.from(previewRoot.querySelectorAll<HTMLElement>(".mock-paper-preview-page")) : [];
+    const expectedPageCount = getMockPaperPages(answerKeyOutput).length;
+
     if (renderedPages.length === 0) {
       return false;
     }
@@ -2255,8 +2305,9 @@ export default function Home() {
     const JsPdf = runtime.jspdf.jsPDF;
     const pdf = new JsPdf({ orientation: "portrait", unit: "mm", format: "a4" });
 
-    for (let index = 0; index < renderedPages.length; index += 1) {
-      const page = renderedPages[index];
+    const exportPageCount = Math.max(renderedPages.length, expectedPageCount);
+    for (let index = 0; index < exportPageCount; index += 1) {
+      const page = renderedPages[Math.min(index, renderedPages.length - 1)];
       const canvas = await runtime.html2canvas(page, {
         backgroundColor: "#ffffff",
         scale: 2,
@@ -2460,12 +2511,16 @@ Formatting rules:
 - Do not include meta commentary.
 - Preserve punctuation symbols, numbering symbols, separators, and typographic emphasis markers reflected in the uploaded template.
 - Preserve bold using **text**, preserve underlines using <u>text</u>, and preserve highlights using ==text== where present in template cues.
-- Insert page separators using exactly: [[PAGE_BREAK]] between pages.
+- Render mathematical expressions using LaTeX delimiters: inline $...$ and block $$...$$.
+- For geometry/trigonometry/chart-style questions, generate SVG inside fenced code blocks using language tag svg (not external image URLs), for example: \`\`\`svg ... \`\`\`.
+- Keep SVG minimal and print-safe: stroke="black", fill="none" (or white), include a viewBox, and include text labels for points/angles.
+- Insert page separators using exactly: [[PAGE_BREAK]] between pages (you may also output [PAGE_BREAK], it will be normalized).
 - Keep each page length balanced for print readability.
 - When template cues are present, do not invent a new format. Reuse template skeleton and only replace content.
 - Target page count: close to ${layoutPageCount > 0 ? layoutPageCount : templatePageCount > 0 ? templatePageCount : "source template"} when feasible, but allow variation if content quality requires it.
 - If STRICT mode is enabled: keep major headings and section blocks highly similar to source template, but allow minor structural adjustments.
 - If typography/layout profile is available, keep font family style, font-size scale, line spacing rhythm, and per-page text density close to that profile.
+- For long-answer questions, do NOT draw underscore lines manually. Use [LINES: X] token where X is 8-12 for normal long answers.
 
 Source document markdown:
 ${getSourceContext()}
@@ -2541,6 +2596,10 @@ Goal:
 - Template replica mode: ${strictTemplateReplicaMode ? "STRICT" : "RELAXED"}.
 - If STRICT, keep the existing layout scaffold untouched (same heading/order/numbering/mark format) and modify only requested content.
 - In STRICT mode, preserve line spacing rhythm, section/page segmentation style, and emphasis markers (bold/underline/highlight) unless user asks to change them.
+- Preserve math notation using LaTeX delimiters: inline $...$ and block $$...$$.
+- Preserve and/or generate SVG diagram code blocks for geometry/trig/chart questions, with print-safe black-and-white styling and labels.
+- Keep long-answer writing space blocks using [LINES: X] tokens (typically X = 8-12) where applicable.
+- Keep page boundaries with [[PAGE_BREAK]] markers (or [PAGE_BREAK], which will be normalized).
 
 ${
   hasTemplate
@@ -5334,13 +5393,51 @@ ${getSourceContext()}
                                     style={{
                                       width: `${MOCK_PAPER_A4_WIDTH_PX}px`,
                                       maxWidth: `${MOCK_PAPER_A4_WIDTH_PX}px`,
+                                      height: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
+                                      minHeight: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
+                                      maxHeight: `${MOCK_PAPER_A4_HEIGHT_PX}px`,
+                                      overflow: "hidden",
                                     }}
                                   >
                                     <div
                                       className="mock-paper-preview app-ui-content prose prose-sm max-w-none font-serif leading-relaxed text-slate-800 prose-headings:font-serif prose-p:my-1 prose-li:my-0.5"
                                       style={mockPaperTypographyStyle}
                                     >
-                                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{page}</ReactMarkdown>
+                                        <ReactMarkdown
+                                          remarkPlugins={[remarkGfm]}
+                                          components={{
+                                            code(props) {
+                                              const { className, children, ...rest } = props as {
+                                                className?: string;
+                                                children?: ReactNode;
+                                              };
+
+                                              const raw = String(children ?? "").replace(/\n$/, "");
+                                              const language = className?.replace("language-", "").toLowerCase() ?? "";
+                                              const isBlock = Boolean(className && className.includes("language-"));
+
+                                              if (isBlock && (language === "svg" || language === "diagram-svg")) {
+                                                const svgMarkup = raw.trim();
+                                                const dataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
+                                                return (
+                                                  <img
+                                                    src={dataUri}
+                                                    alt="Exam diagram"
+                                                    className="my-2 w-full max-w-[520px] border border-slate-300 bg-white"
+                                                  />
+                                                );
+                                              }
+
+                                              return (
+                                                <code className={className} {...rest}>
+                                                  {children}
+                                                </code>
+                                              );
+                                            },
+                                          }}
+                                        >
+                                          {page}
+                                        </ReactMarkdown>
                                     </div>
                                     <div className="mt-8 border-t border-slate-200 pt-2 text-right text-[11px] text-slate-500">Page {index + 1}</div>
                                   </div>
