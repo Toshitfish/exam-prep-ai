@@ -4160,7 +4160,7 @@ ${getSourceContext()}
 
     return (
       <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[#ececec] px-8 py-6 md:px-10 md:py-8">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#d9d9d9] bg-[#f7f7f7] px-4 py-3">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-[#d5d5d5] bg-[#f3f3f3] px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <input
               value={newFolderNameInput}
@@ -4171,17 +4171,17 @@ ${getSourceContext()}
                 }
               }}
               placeholder="New folder name"
-              className="w-[260px] rounded-lg border border-[#cfcfcf] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200"
+              className="w-[260px] rounded-md border border-[#c9c9c9] bg-white px-3 py-2 text-sm text-[#3a3a3a] focus:outline-none focus:ring-2 focus:ring-[#c9c9c9]"
             />
             <button
               type="button"
               onClick={createWorkspaceFolder}
-              className="inline-flex items-center gap-2 rounded-lg border border-[#2d95c3] bg-[#4ab2de] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#3da8d6]"
+              className="inline-flex items-center gap-2 rounded-md border border-[#b8b8b8] bg-[#fafafa] px-3.5 py-2 text-sm font-medium text-[#2e2e2e] transition hover:bg-[#f0f0f0]"
             >
               <Plus size={14} /> New Folder
             </button>
           </div>
-          <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
+          <label className="inline-flex items-center gap-2 text-xs font-medium text-[#5f5f5f]">
             <input
               type="checkbox"
               checked={autoOpenLastWorkspaceFromHome}
@@ -4192,7 +4192,7 @@ ${getSourceContext()}
           </label>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-[#d4d4d4] bg-[#efefef] px-3 py-5">
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-lg border border-[#d4d4d4] bg-[#ededed] px-3 py-5">
           <div className="grid grid-cols-2 gap-y-20 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
             {sortedFolders.map((folder) => {
               const folderState = folderWorkspaceStates[folder.id];
@@ -4204,13 +4204,13 @@ ${getSourceContext()}
                   <button
                     type="button"
                     onClick={() => openWorkspaceFolder(folder.id)}
-                    className="rounded-xl p-1 transition hover:bg-white/20"
+                    className="rounded-md p-1"
                     aria-label={`Open ${folder.name}`}
                   >
                     <div className={`relative h-[104px] w-[158px] ${folder.id === activeWorkspaceFolderId ? "scale-[1.015]" : ""}`}>
                       <svg
                         viewBox="0 0 180 122"
-                        className="h-full w-full drop-shadow-[0_1px_1px_rgba(0,0,0,0.22)]"
+                        className="h-full w-full"
                         role="img"
                         aria-label="Folder"
                       >
@@ -4293,7 +4293,7 @@ ${getSourceContext()}
                     <button
                       type="button"
                       onClick={() => beginRenameFolder(folder)}
-                      className="rounded-lg p-1 text-slate-500 transition hover:bg-white hover:text-slate-700"
+                      className="rounded-md p-1 text-slate-500 transition hover:bg-[#f2f2f2] hover:text-slate-700"
                       aria-label={`Rename ${folder.name}`}
                     >
                       <PencilLine size={14} />
@@ -4302,7 +4302,7 @@ ${getSourceContext()}
                       type="button"
                       onClick={() => deleteWorkspaceFolder(folder.id)}
                       disabled={workspaceFolders.length <= 1}
-                      className="rounded-lg p-1 text-slate-500 transition hover:bg-white hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                      className="rounded-md p-1 text-slate-500 transition hover:bg-[#f2f2f2] hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
                       aria-label={`Delete ${folder.name}`}
                     >
                       <X size={14} />
