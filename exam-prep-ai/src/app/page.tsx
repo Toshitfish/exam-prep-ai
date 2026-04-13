@@ -694,7 +694,6 @@ export default function Home() {
     workspaceFolders: WorkspaceFolder[];
     activeWorkspaceFolderId: string;
     folderWorkspaceStates: Record<string, FolderWorkspaceState>;
-    autoOpenLastWorkspaceFromHome: boolean;
   };
   type PersistedWorkspace = {
     sourceLibrary: SourceItem[];
