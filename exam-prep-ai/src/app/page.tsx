@@ -112,6 +112,28 @@ const STUDIO_TOOL_CREDIT_COSTS = {
   "timed-section": TOOL_CREDIT_COSTS.timedSection,
 } as const;
 
+const HISTORY_IMAGE_BANK = [
+  {
+    topic: "Marshall Plan / Cold War",
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/5/53/Marshall_Plan_poster.JPG/640px-Marshall_Plan_poster.JPG",
+  },
+  {
+    topic: "Munich Agreement / WWII",
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/1/18/The_Munich_Agreement.jpg/640px-The_Munich_Agreement.jpg",
+  },
+  {
+    topic: "Yalta Conference",
+    url: "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d2/Yalta_Conference_%28Churchill%2C_Roosevelt%2C_Stalin%29_%28B%26W%29.jpg/640px-Yalta_Conference_%28Churchill%2C_Roosevelt%2C_Stalin%29_%28B%26W%29.jpg",
+  },
+] as const;
+
+const HISTORY_IMAGE_BANK_PROMPT = HISTORY_IMAGE_BANK.map((item) => `- ${item.topic}: ${item.url}`).join("\n");
+
+const isAllowedHistoryImageUrl = (url: string) => {
+  const normalized = url.trim();
+  return HISTORY_IMAGE_BANK.some((item) => item.url === normalized);
+};
+
 const getWindowViewportBounds = (win: FloatingWindowState) => {
   if (typeof window === "undefined") {
     return { minX: 20, minY: 20, maxX: 20, maxY: 20 };
@@ -354,7 +376,7 @@ const DraggableWindow = ({
 };
 
 export default function Home() {
-  type AppView = "workspace" | "vault" | "analytics" | "syllabus" | "purchase";
+  type AppView = "home" | "workspace" | "vault" | "analytics" | "syllabus" | "purchase";
   type MarketplacePanel = "store" | "usage";
   type CoverEditableField = "learnerName" | "examDate" | "focusSubject" | "streakDays" | "dailyMission";
   type WindowId = "answer-key" | "grade-answer" | "marking-rules" | "topic-predictor" | "timed-section";
@@ -639,7 +661,14 @@ export default function Home() {
     streakDays: number;
     dailyMission: string;
   };
-  type PersistedDrafts = {
+  type WorkspaceFolder = {
+    id: string;
+    name: string;
+    tag: string;
+    createdAt: number;
+    updatedAt: number;
+  };
+  type WorkspaceCoreDrafts = {
     gradingAnswer: string;
     markingRulesDraft: string;
     answerKeyOutput: string;
@@ -652,6 +681,18 @@ export default function Home() {
     workspaceChatSections: WorkspaceChatSection[];
     activeWorkspaceChatId: string;
   };
+  type FolderWorkspaceState = {
+    sourceLibrary: SourceItem[];
+    activeSourceId: string | null;
+    sourceText: string;
+    drafts: WorkspaceCoreDrafts;
+  };
+  type PersistedDrafts = WorkspaceCoreDrafts & {
+    workspaceFolders: WorkspaceFolder[];
+    activeWorkspaceFolderId: string;
+    folderWorkspaceStates: Record<string, FolderWorkspaceState>;
+    autoOpenLastWorkspaceFromHome: boolean;
+  };
   type PersistedWorkspace = {
     sourceLibrary: SourceItem[];
     activeSourceId: string | null;
@@ -661,6 +702,13 @@ export default function Home() {
   };
 
   const getWorkspaceLocalStorageKey = (userId: string) => `${WORKSPACE_LOCAL_STORAGE_KEY_PREFIX}:${userId}`;
+  const createDefaultWorkspaceFolder = (): WorkspaceFolder => ({
+    id: "workspace-folder-1",
+    name: "My Workspace",
+    tag: "General",
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  });
   const createDefaultWorkspaceSection = (): WorkspaceChatSection => ({
     id: "workspace-chat-1",
     title: "Chat 1",
@@ -668,6 +716,14 @@ export default function Home() {
     updatedAt: Date.now(),
     messages: [],
   });
+
+  const [workspaceFolders, setWorkspaceFolders] = useState<WorkspaceFolder[]>([createDefaultWorkspaceFolder()]);
+  const [activeWorkspaceFolderId, setActiveWorkspaceFolderId] = useState("workspace-folder-1");
+  const [folderWorkspaceStates, setFolderWorkspaceStates] = useState<Record<string, FolderWorkspaceState>>({});
+  const [newFolderNameInput, setNewFolderNameInput] = useState("");
+  const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
+  const [editingFolderName, setEditingFolderName] = useState("");
+  const [autoOpenLastWorkspaceFromHome, setAutoOpenLastWorkspaceFromHome] = useState(false);
 
   const [workspaceChatSections, setWorkspaceChatSections] = useState<WorkspaceChatSection[]>([createDefaultWorkspaceSection()]);
   const [activeWorkspaceChatId, setActiveWorkspaceChatId] = useState("workspace-chat-1");
@@ -687,7 +743,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const workspaceIsLoading = workspaceStatus === "submitted" || workspaceStatus === "streaming";
   const gradingIsLoading = gradingStatus === "submitted" || gradingStatus === "streaming";
-  const [activeView, setActiveView] = useState<AppView>("workspace");
+  const [activeView, setActiveView] = useState<AppView>("home");
   const [isSourceCollapsed, setIsSourceCollapsed] = useState(false);
   const [isChatCollapsed, setIsChatCollapsed] = useState(false);
   const [isEngineCollapsed, setIsEngineCollapsed] = useState(false);
@@ -929,6 +985,126 @@ export default function Home() {
     );
   };
 
+  const getCurrentWorkspaceCoreDrafts = (): WorkspaceCoreDrafts => ({
+    gradingAnswer,
+    markingRulesDraft,
+    answerKeyOutput,
+    gradingFeedbackDraft,
+    topicPredictorDraft,
+    mockPaperDifficulty,
+    timedSectionName,
+    timedMinutes,
+    showTemplateUnderlay,
+    workspaceChatSections,
+    activeWorkspaceChatId,
+  });
+
+  const buildCurrentFolderWorkspaceState = (): FolderWorkspaceState => ({
+    sourceLibrary,
+    activeSourceId,
+    sourceText,
+    drafts: getCurrentWorkspaceCoreDrafts(),
+  });
+
+  const applyFolderWorkspaceState = (state: FolderWorkspaceState) => {
+    const validRoles: SourceRole[] = ["question-paper", "marking-scheme", "model-answer", "notes"];
+    const nextSources = Array.isArray(state.sourceLibrary)
+      ? state.sourceLibrary.filter(
+          (item): item is SourceItem =>
+            typeof item?.id === "string" &&
+            typeof item.name === "string" &&
+            typeof item.role === "string" &&
+            validRoles.includes(item.role as SourceRole) &&
+            typeof item.text === "string" &&
+            typeof item.selected === "boolean",
+        )
+      : [];
+
+    const persistedActiveId =
+      typeof state.activeSourceId === "string" && nextSources.some((item) => item.id === state.activeSourceId)
+        ? state.activeSourceId
+        : null;
+
+    setIsParsing(false);
+    setParseDiagnostics(null);
+    setSourceLibrary(nextSources);
+    setSourcePdfUrls({});
+    setTemplateLayoutProfiles({});
+    setActiveSourceId(persistedActiveId);
+    setSourceText(typeof state.sourceText === "string" ? state.sourceText : nextSources.find((item) => item.id === persistedActiveId)?.text ?? "");
+
+    const drafts = state.drafts;
+    if (typeof drafts.gradingAnswer === "string") setGradingAnswer(drafts.gradingAnswer);
+    if (typeof drafts.markingRulesDraft === "string") setMarkingRulesDraft(drafts.markingRulesDraft);
+    if (typeof drafts.answerKeyOutput === "string") setAnswerKeyOutput(drafts.answerKeyOutput);
+    if (typeof drafts.gradingFeedbackDraft === "string") setGradingFeedbackDraft(drafts.gradingFeedbackDraft);
+    if (typeof drafts.topicPredictorDraft === "string") setTopicPredictorDraft(drafts.topicPredictorDraft);
+    if (drafts.mockPaperDifficulty === "balanced" || drafts.mockPaperDifficulty === "exam-hard" || drafts.mockPaperDifficulty === "mostly-medium") {
+      setMockPaperDifficulty(drafts.mockPaperDifficulty);
+    }
+    if (typeof drafts.timedSectionName === "string") setTimedSectionName(drafts.timedSectionName);
+    if (typeof drafts.timedMinutes === "number") setTimedMinutes(Math.max(1, drafts.timedMinutes));
+    if (typeof drafts.showTemplateUnderlay === "boolean") setShowTemplateUnderlay(drafts.showTemplateUnderlay);
+    if (Array.isArray(drafts.workspaceChatSections) && drafts.workspaceChatSections.length > 0) {
+      setWorkspaceChatSections(drafts.workspaceChatSections.slice(-40));
+    } else {
+      setWorkspaceChatSections([createDefaultWorkspaceSection()]);
+    }
+    if (typeof drafts.activeWorkspaceChatId === "string") {
+      setActiveWorkspaceChatId(drafts.activeWorkspaceChatId);
+    }
+  };
+
+  const openWorkspaceFolder = (folderId: string) => {
+    if (folderId === activeWorkspaceFolderId) {
+      setActiveView("workspace");
+      return;
+    }
+
+    const currentSnapshot = buildCurrentFolderWorkspaceState();
+    setFolderWorkspaceStates((previous) => ({
+      ...previous,
+      [activeWorkspaceFolderId]: currentSnapshot,
+    }));
+
+    const nextSnapshot = folderWorkspaceStates[folderId];
+    if (nextSnapshot) {
+      applyFolderWorkspaceState(nextSnapshot);
+    } else {
+      applyFolderWorkspaceState({
+        sourceLibrary: [],
+        activeSourceId: null,
+        sourceText: "",
+        drafts: {
+          gradingAnswer: "",
+          markingRulesDraft: "",
+          answerKeyOutput: "",
+          gradingFeedbackDraft: "",
+          topicPredictorDraft: "",
+          mockPaperDifficulty: "balanced",
+          timedSectionName: "Section B",
+          timedMinutes: 15,
+          showTemplateUnderlay: true,
+          workspaceChatSections: [createDefaultWorkspaceSection()],
+          activeWorkspaceChatId: "workspace-chat-1",
+        },
+      });
+    }
+
+    setActiveWorkspaceFolderId(folderId);
+    setWorkspaceFolders((previous) =>
+      previous.map((folder) =>
+        folder.id === folderId
+          ? {
+              ...folder,
+              updatedAt: Date.now(),
+            }
+          : folder,
+      ),
+    );
+    setActiveView("workspace");
+  };
+
   useEffect(() => {
     if (!session?.user?.name || hasHydratedWorkspace.current) {
       return;
@@ -1090,51 +1266,100 @@ export default function Home() {
       }
 
       if (workspace.drafts) {
-        if (typeof workspace.drafts.gradingAnswer === "string") setGradingAnswer(workspace.drafts.gradingAnswer);
-        if (typeof workspace.drafts.markingRulesDraft === "string") setMarkingRulesDraft(workspace.drafts.markingRulesDraft);
-        if (typeof workspace.drafts.answerKeyOutput === "string") setAnswerKeyOutput(workspace.drafts.answerKeyOutput);
-        if (typeof workspace.drafts.gradingFeedbackDraft === "string") setGradingFeedbackDraft(workspace.drafts.gradingFeedbackDraft);
-        if (typeof workspace.drafts.topicPredictorDraft === "string") setTopicPredictorDraft(workspace.drafts.topicPredictorDraft);
-        if (
-          workspace.drafts.mockPaperDifficulty === "balanced" ||
-          workspace.drafts.mockPaperDifficulty === "exam-hard" ||
-          workspace.drafts.mockPaperDifficulty === "mostly-medium"
-        ) {
-          setMockPaperDifficulty(workspace.drafts.mockPaperDifficulty);
-        }
-        if (typeof workspace.drafts.timedSectionName === "string") setTimedSectionName(workspace.drafts.timedSectionName);
-        if (typeof workspace.drafts.timedMinutes === "number") setTimedMinutes(Math.max(1, workspace.drafts.timedMinutes));
-        if (typeof workspace.drafts.showTemplateUnderlay === "boolean") setShowTemplateUnderlay(workspace.drafts.showTemplateUnderlay);
-          if (Array.isArray(workspace.drafts.workspaceChatSections)) {
-            const validSections = workspace.drafts.workspaceChatSections
+        const legacyCoreDrafts: WorkspaceCoreDrafts = {
+          gradingAnswer: typeof workspace.drafts.gradingAnswer === "string" ? workspace.drafts.gradingAnswer : "",
+          markingRulesDraft: typeof workspace.drafts.markingRulesDraft === "string" ? workspace.drafts.markingRulesDraft : "",
+          answerKeyOutput: typeof workspace.drafts.answerKeyOutput === "string" ? workspace.drafts.answerKeyOutput : "",
+          gradingFeedbackDraft: typeof workspace.drafts.gradingFeedbackDraft === "string" ? workspace.drafts.gradingFeedbackDraft : "",
+          topicPredictorDraft: typeof workspace.drafts.topicPredictorDraft === "string" ? workspace.drafts.topicPredictorDraft : "",
+          mockPaperDifficulty:
+            workspace.drafts.mockPaperDifficulty === "exam-hard" || workspace.drafts.mockPaperDifficulty === "mostly-medium"
+              ? workspace.drafts.mockPaperDifficulty
+              : "balanced",
+          timedSectionName: typeof workspace.drafts.timedSectionName === "string" ? workspace.drafts.timedSectionName : "Section B",
+          timedMinutes: typeof workspace.drafts.timedMinutes === "number" ? Math.max(1, workspace.drafts.timedMinutes) : 15,
+          showTemplateUnderlay: typeof workspace.drafts.showTemplateUnderlay === "boolean" ? workspace.drafts.showTemplateUnderlay : true,
+          workspaceChatSections: Array.isArray(workspace.drafts.workspaceChatSections) && workspace.drafts.workspaceChatSections.length > 0
+            ? workspace.drafts.workspaceChatSections.slice(-40)
+            : [createDefaultWorkspaceSection()],
+          activeWorkspaceChatId:
+            typeof workspace.drafts.activeWorkspaceChatId === "string" ? workspace.drafts.activeWorkspaceChatId : "workspace-chat-1",
+        };
+
+        const parsedFolders = Array.isArray((workspace.drafts as Partial<PersistedDrafts>).workspaceFolders)
+          ? ((workspace.drafts as Partial<PersistedDrafts>).workspaceFolders ?? [])
               .filter(
-                (section): section is WorkspaceChatSection =>
-                  typeof section?.id === "string" &&
-                  typeof section.title === "string" &&
-                  typeof section.createdAt === "number" &&
-                  typeof section.updatedAt === "number" &&
-                  Array.isArray(section.messages),
+                (folder) =>
+                  typeof folder?.id === "string" &&
+                  typeof folder.name === "string" &&
+                  typeof folder.createdAt === "number" &&
+                  typeof folder.updatedAt === "number",
               )
-              .map((section) => ({
-                ...section,
-                messages: section.messages
-                  .filter(
-                    (message): message is WorkspaceChatArchiveMessage =>
-                      typeof message?.id === "string" &&
-                      (message.role === "user" || message.role === "assistant") &&
-                      typeof message.text === "string",
-                  )
-                  .slice(-80),
-              }));
+              .map((folder) => ({
+                ...folder,
+                tag: typeof folder.tag === "string" && folder.tag.trim() ? folder.tag : "General",
+              }))
+              .slice(0, 100)
+          : [];
 
-            if (validSections.length > 0) {
-              setWorkspaceChatSections(validSections);
+        const rawFolderStates = (workspace.drafts as Partial<PersistedDrafts>).folderWorkspaceStates;
+        const parsedFolderStates: Record<string, FolderWorkspaceState> = {};
+        if (rawFolderStates && typeof rawFolderStates === "object") {
+          Object.entries(rawFolderStates).forEach(([folderId, state]) => {
+            if (!state || typeof state !== "object") {
+              return;
             }
-          }
 
-          if (typeof workspace.drafts.activeWorkspaceChatId === "string") {
-            setActiveWorkspaceChatId(workspace.drafts.activeWorkspaceChatId);
-          }
+            const candidate = state as Partial<FolderWorkspaceState>;
+            if (!Array.isArray(candidate.sourceLibrary) || !candidate.drafts || typeof candidate.drafts !== "object") {
+              return;
+            }
+
+            parsedFolderStates[folderId] = {
+              sourceLibrary: candidate.sourceLibrary as SourceItem[],
+              activeSourceId: typeof candidate.activeSourceId === "string" ? candidate.activeSourceId : null,
+              sourceText: typeof candidate.sourceText === "string" ? candidate.sourceText : "",
+              drafts: {
+                ...legacyCoreDrafts,
+                ...(candidate.drafts as Partial<WorkspaceCoreDrafts>),
+              },
+            };
+          });
+        }
+
+        if (parsedFolders.length === 0) {
+          const fallbackFolder = createDefaultWorkspaceFolder();
+          parsedFolders.push(fallbackFolder);
+          parsedFolderStates[fallbackFolder.id] = {
+            sourceLibrary: nextSources,
+            activeSourceId: persistedActiveId,
+            sourceText: typeof workspace.sourceText === "string" ? workspace.sourceText : "",
+            drafts: legacyCoreDrafts,
+          };
+        }
+
+        const firstFolderId: string = parsedFolders[0]?.id ?? "workspace-folder-1";
+
+        const persistedFolderId: string =
+          typeof (workspace.drafts as Partial<PersistedDrafts>).activeWorkspaceFolderId === "string"
+            ? ((workspace.drafts as Partial<PersistedDrafts>).activeWorkspaceFolderId ?? firstFolderId)
+            : firstFolderId;
+        const resolvedFolderId: string = parsedFolders.some((folder) => folder.id === persistedFolderId)
+          ? persistedFolderId
+          : firstFolderId;
+
+        setWorkspaceFolders(parsedFolders);
+        setFolderWorkspaceStates(parsedFolderStates);
+        setActiveWorkspaceFolderId(resolvedFolderId);
+        setAutoOpenLastWorkspaceFromHome(Boolean((workspace.drafts as Partial<PersistedDrafts>).autoOpenLastWorkspaceFromHome));
+
+        const activeFolderState = parsedFolderStates[resolvedFolderId] ?? {
+          sourceLibrary: nextSources,
+          activeSourceId: persistedActiveId,
+          sourceText: typeof workspace.sourceText === "string" ? workspace.sourceText : "",
+          drafts: legacyCoreDrafts,
+        };
+        applyFolderWorkspaceState(activeFolderState);
       }
     };
 
@@ -1189,6 +1414,25 @@ export default function Home() {
       return;
     }
 
+    const currentFolderSnapshot = buildCurrentFolderWorkspaceState();
+    const mergedFolderStates: Record<string, FolderWorkspaceState> = {
+      ...folderWorkspaceStates,
+      [activeWorkspaceFolderId]: currentFolderSnapshot,
+    };
+
+    const normalizedFolders =
+      workspaceFolders.length > 0
+        ? workspaceFolders
+        : [
+            {
+              id: activeWorkspaceFolderId,
+              name: "My Workspace",
+              tag: "General",
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            },
+          ];
+
     const payload: PersistedWorkspace = {
       sourceLibrary,
       activeSourceId,
@@ -1212,6 +1456,10 @@ export default function Home() {
         showTemplateUnderlay,
         workspaceChatSections,
         activeWorkspaceChatId,
+        workspaceFolders: normalizedFolders,
+        activeWorkspaceFolderId,
+        folderWorkspaceStates: mergedFolderStates,
+        autoOpenLastWorkspaceFromHome,
       },
     };
 
@@ -1286,6 +1534,10 @@ export default function Home() {
     showTemplateUnderlay,
     workspaceChatSections,
     activeWorkspaceChatId,
+    workspaceFolders,
+    activeWorkspaceFolderId,
+    folderWorkspaceStates,
+    autoOpenLastWorkspaceFromHome,
   ]);
 
   const getGreeting = () => {
@@ -1932,7 +2184,10 @@ export default function Home() {
       return "";
     }
 
-    const normalizedPageBreaks = text.replace(/\[(?:\[)?PAGE_BREAK(?:\])?\]/gi, "[[PAGE_BREAK]]");
+    const normalizedPageBreaks = text
+      .replace(/\[(?:\[)?PAGE_BREAK(?:\])?\]/gi, "[[PAGE_BREAK]]")
+      // Treat standalone markdown horizontal rules as page break aliases.
+      .replace(/(^|\n)\s*---\s*(?=\n|$)/g, "$1[[PAGE_BREAK]]");
 
     return normalizedPageBreaks.replace(/\[LINES:\s*(\d+)\]/gi, (_, value) => {
       const lineCount = Math.max(1, Math.min(30, Number.parseInt(value, 10) || 0));
@@ -1940,6 +2195,16 @@ export default function Home() {
       const block = Array.from({ length: lineCount }, () => line).join("\n");
       return `\n\n${block}\n\n`;
     });
+  };
+
+  const isHistoryVisualContext = () => {
+    const subjectIsHistory = /\bhistory\b/i.test(focusSubject);
+    const selectedSourceNames = sourceLibrary
+      .filter((item) => item.selected)
+      .map((item) => `${item.name} ${item.role}`)
+      .join(" ");
+    const sourceSignalsHistory = /\bhistory\b|dbq|source[-\s]?based|political\s+cartoon/i.test(selectedSourceNames);
+    return subjectIsHistory || sourceSignalsHistory;
   };
 
   const normalizeMockPaperOutput = (content: string) => {
@@ -2459,6 +2724,7 @@ export default function Home() {
     const { hasTemplate, templateHint } = getPastPaperTemplateHint();
     const { hasBlueprint, blueprint, pageCount: templatePageCount } = getTemplateReplicaBlueprint();
     const { hasLayoutHint, layoutHint, templatePageCount: layoutPageCount } = getTemplateLayoutHint();
+    const historyVisualMode = isHistoryVisualContext();
 
     const prompt = `
 You are an examiner creating a printable mock exam paper from uploaded sources.
@@ -2512,8 +2778,9 @@ Formatting rules:
 - Preserve punctuation symbols, numbering symbols, separators, and typographic emphasis markers reflected in the uploaded template.
 - Preserve bold using **text**, preserve underlines using <u>text</u>, and preserve highlights using ==text== where present in template cues.
 - Render mathematical expressions using LaTeX delimiters: inline $...$ and block $$...$$.
-- For geometry/trigonometry/chart-style questions, generate SVG inside fenced code blocks using language tag svg (not external image URLs), for example: \`\`\`svg ... \`\`\`.
-- Keep SVG minimal and print-safe: stroke="black", fill="none" (or white), include a viewBox, and include text labels for points/angles.
+- VISUAL SOURCE RULES (CRITICAL): ${historyVisualMode
+  ? `If a DBQ source requires political cartoon/photo, embed image using markdown syntax ![Description](URL). Never invent URLs. You must choose only from this verified image bank:\n${HISTORY_IMAGE_BANK_PROMPT}`
+  : "For geometry/trigonometry/chart-style questions, generate SVG inside fenced code blocks using language tag svg (not external image URLs), for example: ```svg ... ```. Keep SVG print-safe with stroke=black, fill=none/white, viewBox, and clear labels."}
 - Insert page separators using exactly: [[PAGE_BREAK]] between pages (you may also output [PAGE_BREAK], it will be normalized).
 - Keep each page length balanced for print readability.
 - When template cues are present, do not invent a new format. Reuse template skeleton and only replace content.
@@ -2583,6 +2850,7 @@ ${topicContext}
     const { hasTemplate, templateHint } = getPastPaperTemplateHint();
     const { hasBlueprint, blueprint, pageCount: templatePageCount } = getTemplateReplicaBlueprint();
     const { hasLayoutHint, layoutHint, templatePageCount: layoutPageCount } = getTemplateLayoutHint();
+    const historyVisualMode = isHistoryVisualContext();
 
     const prompt = `
 You are editing an existing mock exam paper.
@@ -2597,7 +2865,9 @@ Goal:
 - If STRICT, keep the existing layout scaffold untouched (same heading/order/numbering/mark format) and modify only requested content.
 - In STRICT mode, preserve line spacing rhythm, section/page segmentation style, and emphasis markers (bold/underline/highlight) unless user asks to change them.
 - Preserve math notation using LaTeX delimiters: inline $...$ and block $$...$$.
-- Preserve and/or generate SVG diagram code blocks for geometry/trig/chart questions, with print-safe black-and-white styling and labels.
+- VISUAL SOURCE RULES (CRITICAL): ${historyVisualMode
+  ? `For history DBQ visual sources, use markdown image syntax ![Description](URL). Never invent URLs and only use this verified image bank:\n${HISTORY_IMAGE_BANK_PROMPT}`
+  : "Preserve and/or generate SVG diagram code blocks for geometry/trig/chart questions, with print-safe black-and-white styling and labels."}
 - Keep long-answer writing space blocks using [LINES: X] tokens (typically X = 8-12) where applicable.
 - Keep page boundaries with [[PAGE_BREAK]] markers (or [PAGE_BREAK], which will be normalized).
 
@@ -3091,7 +3361,9 @@ ${getSourceContext()}
   };
 
   const enterDesktop = () => {
-    animateCoverExit();
+    animateCoverExit(() => {
+      setActiveView(autoOpenLastWorkspaceFromHome ? "workspace" : "home");
+    });
   };
 
   const startFocusSprintFromCover = () => {
@@ -3102,6 +3374,111 @@ ${getSourceContext()}
       openWindow("timed-section");
       setTimerRunning(true);
     });
+  };
+
+  const createWorkspaceFolder = () => {
+    const trimmed = newFolderNameInput.trim();
+    if (!trimmed) {
+      return;
+    }
+
+    const now = Date.now();
+    const nextFolder: WorkspaceFolder = {
+      id: `workspace-folder-${now}`,
+      name: trimmed.slice(0, 48),
+      tag: focusSubject.trim() || "General",
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    const currentSnapshot = buildCurrentFolderWorkspaceState();
+    setFolderWorkspaceStates((previous) => ({
+      ...previous,
+      [activeWorkspaceFolderId]: currentSnapshot,
+      [nextFolder.id]: {
+        sourceLibrary: [],
+        activeSourceId: null,
+        sourceText: "",
+        drafts: {
+          gradingAnswer: "",
+          markingRulesDraft: "",
+          answerKeyOutput: "",
+          gradingFeedbackDraft: "",
+          topicPredictorDraft: "",
+          mockPaperDifficulty: "balanced",
+          timedSectionName: "Section B",
+          timedMinutes: 15,
+          showTemplateUnderlay: true,
+          workspaceChatSections: [createDefaultWorkspaceSection()],
+          activeWorkspaceChatId: "workspace-chat-1",
+        },
+      },
+    }));
+    setWorkspaceFolders((previous) => [nextFolder, ...previous]);
+    setNewFolderNameInput("");
+    openWorkspaceFolder(nextFolder.id);
+  };
+
+  const beginRenameFolder = (folder: WorkspaceFolder) => {
+    setEditingFolderId(folder.id);
+    setEditingFolderName(folder.name);
+  };
+
+  const applyRenameFolder = () => {
+    if (!editingFolderId) {
+      return;
+    }
+
+    const nextName = editingFolderName.trim();
+    if (!nextName) {
+      setEditingFolderId(null);
+      setEditingFolderName("");
+      return;
+    }
+
+    setWorkspaceFolders((previous) =>
+      previous.map((folder) =>
+        folder.id === editingFolderId
+          ? {
+              ...folder,
+              name: nextName.slice(0, 48),
+              updatedAt: Date.now(),
+            }
+          : folder,
+      ),
+    );
+    setEditingFolderId(null);
+    setEditingFolderName("");
+  };
+
+  const deleteWorkspaceFolder = (folderId: string) => {
+    if (workspaceFolders.length <= 1) {
+      return;
+    }
+
+    const confirmed = window.confirm("Delete this folder workspace? Its saved workspace state will be removed.");
+    if (!confirmed) {
+      return;
+    }
+
+    const remainingFolders = workspaceFolders.filter((folder) => folder.id !== folderId);
+    const fallbackFolderId = remainingFolders[0]?.id;
+
+    setWorkspaceFolders(remainingFolders);
+    setFolderWorkspaceStates((previous) => {
+      const next = { ...previous };
+      delete next[folderId];
+      return next;
+    });
+
+    if (editingFolderId === folderId) {
+      setEditingFolderId(null);
+      setEditingFolderName("");
+    }
+
+    if (folderId === activeWorkspaceFolderId && fallbackFolderId) {
+      openWorkspaceFolder(fallbackFolderId);
+    }
   };
 
   const openEditField = (field: CoverEditableField) => {
@@ -3279,6 +3656,12 @@ ${getSourceContext()}
       return;
     }
 
+    const currentFolderSnapshot = buildCurrentFolderWorkspaceState();
+    const mergedFolderStates: Record<string, FolderWorkspaceState> = {
+      ...folderWorkspaceStates,
+      [activeWorkspaceFolderId]: currentFolderSnapshot,
+    };
+
     const payload: PersistedWorkspace = {
       sourceLibrary,
       activeSourceId,
@@ -3302,6 +3685,10 @@ ${getSourceContext()}
         showTemplateUnderlay,
         workspaceChatSections,
         activeWorkspaceChatId,
+        workspaceFolders,
+        activeWorkspaceFolderId,
+        folderWorkspaceStates: mergedFolderStates,
+        autoOpenLastWorkspaceFromHome,
       },
     };
 
@@ -3766,6 +4153,111 @@ ${getSourceContext()}
       }
       return next;
     });
+  };
+
+  const renderHomeView = () => {
+    const sortedFolders = workspaceFolders.slice().sort((left, right) => right.updatedAt - left.updatedAt);
+
+    return (
+      <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden p-4 md:p-6">
+        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+          <h1 className="text-xl font-semibold text-slate-800">Workspace Home</h1>
+          <p className="mt-1 text-sm text-slate-500">Create folders and keep each folder as a separate workspace.</p>
+          <label className="mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
+            <input
+              type="checkbox"
+              checked={autoOpenLastWorkspaceFromHome}
+              onChange={(event) => setAutoOpenLastWorkspaceFromHome(event.target.checked)}
+              className="h-3.5 w-3.5 rounded border-slate-300"
+            />
+            Auto-open last workspace after cover page
+          </label>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <input
+              value={newFolderNameInput}
+              onChange={(event) => setNewFolderNameInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  createWorkspaceFolder();
+                }
+              }}
+              placeholder="New folder name"
+              className="w-full max-w-sm rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+            />
+            <button
+              type="button"
+              onClick={createWorkspaceFolder}
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
+            >
+              <Plus size={15} /> Create Folder
+            </button>
+          </div>
+        </div>
+
+        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
+          {sortedFolders.map((folder) => (
+            <div
+              key={folder.id}
+              className={`rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
+                folder.id === activeWorkspaceFolderId ? "border-indigo-300 ring-2 ring-indigo-100" : "border-slate-200"
+              }`}
+            >
+              <div className="mb-3 flex items-center justify-between gap-2 text-slate-700">
+                <div className="flex min-w-0 items-center gap-2">
+                  <FolderOpen size={18} />
+                  {editingFolderId === folder.id ? (
+                    <input
+                      value={editingFolderName}
+                      onChange={(event) => setEditingFolderName(event.target.value)}
+                      onBlur={applyRenameFolder}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter") {
+                          applyRenameFolder();
+                        }
+                      }}
+                      autoFocus
+                      className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                    />
+                  ) : (
+                    <p className="truncate text-base font-semibold">{folder.name}</p>
+                  )}
+                </div>
+                <div className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => beginRenameFolder(folder)}
+                    className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
+                    aria-label={`Rename ${folder.name}`}
+                  >
+                    <PencilLine size={14} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => deleteWorkspaceFolder(folder.id)}
+                    disabled={workspaceFolders.length <= 1}
+                    className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                    aria-label={`Delete ${folder.name}`}
+                  >
+                    <X size={14} />
+                  </button>
+                </div>
+              </div>
+              <div className="mb-2 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                {folder.tag}
+              </div>
+              <p className="text-xs text-slate-500">Updated {new Date(folder.updatedAt).toLocaleString()}</p>
+              <button
+                type="button"
+                onClick={() => openWorkspaceFolder(folder.id)}
+                className="mt-3 text-xs font-medium text-indigo-600 hover:text-indigo-700"
+              >
+                Open Workspace
+              </button>
+            </div>
+          ))}
+        </div>
+      </section>
+    );
   };
 
   const renderWorkspaceView = () => {
@@ -5124,6 +5616,9 @@ ${getSourceContext()}
           E
         </div>
         <div className="flex flex-col gap-6">
+          <button className={navClass("home")} aria-label="Home" onClick={() => setActiveView("home")}>
+            <Globe size={20} />
+          </button>
           <button className={navClass("workspace")} aria-label="Dashboard" onClick={() => setActiveView("workspace")}>
             <HomeIcon size={20} />
           </button>
@@ -5151,6 +5646,7 @@ ${getSourceContext()}
         </div>
       </nav>
 
+      {activeView === "home" && renderHomeView()}
       {activeView === "workspace" && renderWorkspaceView()}
       {activeView === "purchase" && renderPurchaseView()}
       {activeView === "vault" && renderVaultView()}
@@ -5158,7 +5654,10 @@ ${getSourceContext()}
       {activeView === "syllabus" && renderSyllabusView()}
 
       <nav className="fixed right-3 bottom-3 left-3 z-40 rounded-2xl border border-white/70 bg-white/95 p-2 shadow-xl backdrop-blur md:hidden">
-        <div className="grid grid-cols-5 gap-1">
+        <div className="grid grid-cols-6 gap-1">
+          <button className={navClass("home")} aria-label="Home" onClick={() => setActiveView("home")}>
+            <Globe size={18} />
+          </button>
           <button className={navClass("workspace")} aria-label="Dashboard" onClick={() => setActiveView("workspace")}>
             <HomeIcon size={18} />
           </button>
@@ -5418,6 +5917,14 @@ ${getSourceContext()}
 
                                               if (isBlock && (language === "svg" || language === "diagram-svg")) {
                                                 const svgMarkup = raw.trim();
+                                                if (isHistoryVisualContext()) {
+                                                  return (
+                                                    <p className="my-2 border border-slate-300 bg-slate-50 px-3 py-2 text-xs italic text-slate-600">
+                                                      [Source visual omitted in history mode]
+                                                    </p>
+                                                  );
+                                                }
+
                                                 const dataUri = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svgMarkup)}`;
                                                 return (
                                                   <img
@@ -5432,6 +5939,43 @@ ${getSourceContext()}
                                                 <code className={className} {...rest}>
                                                   {children}
                                                 </code>
+                                              );
+                                            },
+                                            hr(props) {
+                                              return (
+                                                <hr
+                                                  {...props}
+                                                  className="my-8 border-t-2 border-dashed border-slate-300"
+                                                  style={{
+                                                    breakAfter: "page",
+                                                    pageBreakAfter: "always",
+                                                  }}
+                                                />
+                                              );
+                                            },
+                                            img(props) {
+                                              const src = typeof props.src === "string" ? props.src : "";
+                                              const isHistoryMode = isHistoryVisualContext();
+                                              const allowImage = !isHistoryMode || isAllowedHistoryImageUrl(src);
+
+                                              if (!allowImage) {
+                                                return (
+                                                  <p className="my-2 border border-slate-300 bg-slate-50 px-3 py-2 text-xs italic text-slate-600">
+                                                    [Unverified source image omitted]
+                                                  </p>
+                                                );
+                                              }
+
+                                              return (
+                                                <div className="my-6 flex justify-center">
+                                                  <img
+                                                    {...props}
+                                                    src={src}
+                                                    alt={props.alt || "Exam Source Material"}
+                                                    className="max-h-64 w-full max-w-md object-contain border-2 border-slate-800 bg-white p-1"
+                                                    style={{ filter: "grayscale(100%) contrast(120%)" }}
+                                                  />
+                                                </div>
                                               );
                                             },
                                           }}
