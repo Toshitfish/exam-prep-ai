@@ -217,7 +217,6 @@ const DraggableWindow = ({
   );
 };
 // ...existing code...
-"use client";
 import { useChat } from "@ai-sdk/react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import ReactMarkdown from "react-markdown";
