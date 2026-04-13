@@ -4159,20 +4159,9 @@ ${getSourceContext()}
     const sortedFolders = workspaceFolders.slice().sort((left, right) => right.updatedAt - left.updatedAt);
 
     return (
-      <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden p-4 md:p-6">
-        <div className="mb-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <h1 className="text-xl font-semibold text-slate-800">Workspace Home</h1>
-          <p className="mt-1 text-sm text-slate-500">Create folders and keep each folder as a separate workspace.</p>
-          <label className="mt-3 inline-flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-600">
-            <input
-              type="checkbox"
-              checked={autoOpenLastWorkspaceFromHome}
-              onChange={(event) => setAutoOpenLastWorkspaceFromHome(event.target.checked)}
-              className="h-3.5 w-3.5 rounded border-slate-300"
-            />
-            Auto-open last workspace after cover page
-          </label>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
+      <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-gradient-to-br from-[#fdfdfd] via-[#f2fbff] to-[#eef7ff] px-8 py-6 md:px-10 md:py-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-[#d9eef9] bg-white/80 px-4 py-3 shadow-[0_6px_18px_rgba(117,195,235,0.15)]">
+          <div className="flex flex-wrap items-center gap-2">
             <input
               value={newFolderNameInput}
               onChange={(event) => setNewFolderNameInput(event.target.value)}
@@ -4182,29 +4171,47 @@ ${getSourceContext()}
                 }
               }}
               placeholder="New folder name"
-              className="w-full max-w-sm rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+              className="w-[260px] rounded-xl border-2 border-[#bfe4f6] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-300"
             />
             <button
               type="button"
               onClick={createWorkspaceFolder}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-indigo-700"
+              className="inline-flex items-center gap-2 rounded-xl border-2 border-[#2a8fbc] bg-[#46b6e7] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#2fa8de]"
             >
-              <Plus size={15} /> Create Folder
+              <Plus size={14} /> New Folder
             </button>
           </div>
+          <label className="inline-flex items-center gap-2 text-xs font-medium text-slate-600">
+            <input
+              type="checkbox"
+              checked={autoOpenLastWorkspaceFromHome}
+              onChange={(event) => setAutoOpenLastWorkspaceFromHome(event.target.checked)}
+              className="h-3.5 w-3.5 rounded border-slate-300"
+            />
+            Auto-open last workspace
+          </label>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto sm:grid-cols-2 xl:grid-cols-3">
-          {sortedFolders.map((folder) => (
-            <div
-              key={folder.id}
-              className={`rounded-2xl border bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 hover:shadow-md ${
-                folder.id === activeWorkspaceFolderId ? "border-indigo-300 ring-2 ring-indigo-100" : "border-slate-200"
-              }`}
-            >
-              <div className="mb-3 flex items-center justify-between gap-2 text-slate-700">
-                <div className="flex min-w-0 items-center gap-2">
-                  <FolderOpen size={18} />
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border-2 border-[#d7edf9] bg-white/70 px-3 py-4">
+          <div className="grid grid-cols-2 gap-y-14 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+            {sortedFolders.map((folder) => {
+              const folderState = folderWorkspaceStates[folder.id];
+              const itemCount = folderState?.sourceLibrary.length ?? (folder.id === activeWorkspaceFolderId ? sourceLibrary.length : 0);
+
+              return (
+                <div key={folder.id} className="group flex flex-col items-center">
+                  <button
+                    type="button"
+                    onClick={() => openWorkspaceFolder(folder.id)}
+                    className="rounded-2xl p-2 transition hover:-translate-y-0.5 hover:bg-[#d9eef9]/70"
+                    aria-label={`Open ${folder.name}`}
+                  >
+                    <div className={`relative h-24 w-40 ${folder.id === activeWorkspaceFolderId ? "scale-[1.03]" : ""}`}>
+                      <div className="absolute top-2 left-3 h-5 w-16 rounded-t-lg border-2 border-[#2f8cb6] border-b-0 bg-gradient-to-b from-[#c6efff] to-[#7fd3f5]" />
+                      <div className="absolute top-5 left-0 h-[68px] w-full rounded-2xl border-2 border-[#2f8cb6] bg-gradient-to-b from-[#99dcf8] via-[#63c2ea] to-[#35a9db] shadow-[0_8px_18px_rgba(53,169,219,0.35),inset_0_1px_0_rgba(255,255,255,0.65)]" />
+                    </div>
+                  </button>
+
                   {editingFolderId === folder.id ? (
                     <input
                       value={editingFolderName}
@@ -4216,45 +4223,38 @@ ${getSourceContext()}
                         }
                       }}
                       autoFocus
-                      className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      className="w-36 rounded-md border border-slate-300 bg-white px-2 py-1 text-center text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-300"
                     />
                   ) : (
-                    <p className="truncate text-base font-semibold">{folder.name}</p>
+                    <p className="max-w-[170px] break-words text-center text-[17px] leading-tight font-semibold text-slate-800">
+                      {folder.name}
+                    </p>
                   )}
+                  <p className="mt-1 text-[12px] font-medium text-slate-500">{itemCount} items</p>
+
+                  <div className="mt-2 flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
+                    <button
+                      type="button"
+                      onClick={() => beginRenameFolder(folder)}
+                      className="rounded-lg p-1 text-slate-500 transition hover:bg-white hover:text-slate-700"
+                      aria-label={`Rename ${folder.name}`}
+                    >
+                      <PencilLine size={14} />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => deleteWorkspaceFolder(folder.id)}
+                      disabled={workspaceFolders.length <= 1}
+                      className="rounded-lg p-1 text-slate-500 transition hover:bg-white hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
+                      aria-label={`Delete ${folder.name}`}
+                    >
+                      <X size={14} />
+                    </button>
+                  </div>
                 </div>
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => beginRenameFolder(folder)}
-                    className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"
-                    aria-label={`Rename ${folder.name}`}
-                  >
-                    <PencilLine size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => deleteWorkspaceFolder(folder.id)}
-                    disabled={workspaceFolders.length <= 1}
-                    className="rounded-md p-1 text-slate-400 transition hover:bg-slate-100 hover:text-rose-600 disabled:cursor-not-allowed disabled:opacity-40"
-                    aria-label={`Delete ${folder.name}`}
-                  >
-                    <X size={14} />
-                  </button>
-                </div>
-              </div>
-              <div className="mb-2 inline-flex rounded-full border border-slate-200 bg-slate-50 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
-                {folder.tag}
-              </div>
-              <p className="text-xs text-slate-500">Updated {new Date(folder.updatedAt).toLocaleString()}</p>
-              <button
-                type="button"
-                onClick={() => openWorkspaceFolder(folder.id)}
-                className="mt-3 text-xs font-medium text-indigo-600 hover:text-indigo-700"
-              >
-                Open Workspace
-              </button>
-            </div>
-          ))}
+              );
+            })}
+          </div>
         </div>
       </section>
     );
