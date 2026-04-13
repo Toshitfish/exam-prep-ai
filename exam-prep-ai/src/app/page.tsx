@@ -5202,7 +5202,7 @@ ${getSourceContext()}
               ExamOS maps your exact weaknesses, generates printable mock papers, and builds a daily revision engine to push you toward your target grade.
             </p>
 
-            <div className="mt-4 flex w-full flex-col items-center justify-center gap-4">
+            <div className="mt-6 flex w-full flex-col items-center justify-center gap-4">
               <form
                 onSubmit={(event) => {
                   event.preventDefault();
@@ -5213,21 +5213,24 @@ ${getSourceContext()}
                   setAuthEmailInput(email);
                   setShowAuthPanel(true);
                 }}
-                className="relative flex w-full max-w-md items-center rounded-full border border-slate-200/80 bg-white p-2 shadow-xl shadow-slate-200/50 transition-all focus-within:border-blue-500 focus-within:ring-4 focus-within:ring-blue-500/20 sm:max-w-lg"
+                className="relative flex w-full max-w-md items-center rounded-full border border-white/80 bg-white/60 p-1.5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] backdrop-blur-2xl transition-all focus-within:border-[#007AFF]/60 focus-within:bg-white/90 focus-within:ring-4 focus-within:ring-[#007AFF]/20 sm:max-w-lg"
               >
+                <div className="pl-4 text-slate-400">
+                  <Sparkles size={18} />
+                </div>
                 <input
                   type="email"
                   name="landing-email"
                   placeholder="Enter your email to start..."
-                  className="w-full flex-1 bg-transparent px-4 py-2 text-[15px] font-medium text-slate-800 placeholder-slate-400 outline-none"
+                  className="w-full flex-1 bg-transparent px-3 py-2 text-[15px] font-medium text-slate-800 placeholder-slate-500 outline-none"
                   required
                 />
                 <button
                   type="submit"
-                  className="group flex shrink-0 items-center gap-2 rounded-full bg-blue-500 px-6 py-2.5 text-[15px] font-bold text-white shadow-md transition-all hover:bg-blue-600 hover:shadow-lg active:scale-95"
+                  className="group flex shrink-0 items-center gap-1.5 rounded-full bg-[#007AFF] px-5 py-2 text-[15px] font-medium text-white shadow-sm transition-all hover:bg-blue-600 active:scale-95"
                 >
                   Start
-                  <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
+                  <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
                 </button>
               </form>
 
@@ -5239,7 +5242,7 @@ ${getSourceContext()}
                     el.scrollIntoView({ behavior: "smooth", block: "start" });
                   }
                 }}
-                className="mt-2 text-[14px] font-medium text-slate-500 transition-colors hover:text-slate-800"
+                className="mt-1 text-[13px] font-medium text-slate-500 transition-colors hover:text-slate-800"
               >
                 Or see how it works
               </button>
