@@ -216,9 +216,8 @@ const DraggableWindow = ({
     </motion.div>
   );
 };
+// ...existing code...
 "use client";
-
-import { useEffect, useReducer, useRef, useState, FormEvent, ReactNode } from "react";
 import { useChat } from "@ai-sdk/react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import ReactMarkdown from "react-markdown";
