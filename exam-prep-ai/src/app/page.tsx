@@ -4159,8 +4159,8 @@ ${getSourceContext()}
     const sortedFolders = workspaceFolders.slice().sort((left, right) => right.updatedAt - left.updatedAt);
 
     return (
-      <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-gradient-to-br from-[#fdfdfd] via-[#f2fbff] to-[#eef7ff] px-8 py-6 md:px-10 md:py-8">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-2xl border-2 border-[#d9eef9] bg-white/80 px-4 py-3 shadow-[0_6px_18px_rgba(117,195,235,0.15)]">
+      <section className="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-[#ececec] px-8 py-6 md:px-10 md:py-8">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#d9d9d9] bg-[#f7f7f7] px-4 py-3">
           <div className="flex flex-wrap items-center gap-2">
             <input
               value={newFolderNameInput}
@@ -4171,12 +4171,12 @@ ${getSourceContext()}
                 }
               }}
               placeholder="New folder name"
-              className="w-[260px] rounded-xl border-2 border-[#bfe4f6] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-300"
+              className="w-[260px] rounded-lg border border-[#cfcfcf] bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-sky-200"
             />
             <button
               type="button"
               onClick={createWorkspaceFolder}
-              className="inline-flex items-center gap-2 rounded-xl border-2 border-[#2a8fbc] bg-[#46b6e7] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#2fa8de]"
+              className="inline-flex items-center gap-2 rounded-lg border border-[#2d95c3] bg-[#4ab2de] px-3.5 py-2 text-sm font-semibold text-white transition hover:bg-[#3da8d6]"
             >
               <Plus size={14} /> New Folder
             </button>
@@ -4192,65 +4192,71 @@ ${getSourceContext()}
           </label>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto rounded-2xl border-2 border-[#d7edf9] bg-white/70 px-3 py-4">
-          <div className="grid grid-cols-2 gap-y-14 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
+        <div className="min-h-0 flex-1 overflow-y-auto rounded-xl border border-[#d4d4d4] bg-[#efefef] px-3 py-5">
+          <div className="grid grid-cols-2 gap-y-20 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6">
             {sortedFolders.map((folder) => {
               const folderState = folderWorkspaceStates[folder.id];
               const itemCount = folderState?.sourceLibrary.length ?? (folder.id === activeWorkspaceFolderId ? sourceLibrary.length : 0);
+              const iconIdBase = `finder-folder-${folder.id.replace(/[^a-zA-Z0-9_-]/g, "")}`;
 
               return (
                 <div key={folder.id} className="group flex flex-col items-center">
                   <button
                     type="button"
                     onClick={() => openWorkspaceFolder(folder.id)}
-                    className="rounded-2xl p-2 transition hover:-translate-y-0.5 hover:bg-[#d9eef9]/70"
+                    className="rounded-xl p-1 transition hover:bg-white/20"
                     aria-label={`Open ${folder.name}`}
                   >
-                    <div className={`relative h-24 w-40 ${folder.id === activeWorkspaceFolderId ? "scale-[1.03]" : ""}`}>
+                    <div className={`relative h-[104px] w-[158px] ${folder.id === activeWorkspaceFolderId ? "scale-[1.015]" : ""}`}>
                       <svg
-                        viewBox="0 0 180 120"
-                        className="h-full w-full drop-shadow-[0_8px_14px_rgba(57,149,196,0.35)]"
+                        viewBox="0 0 180 122"
+                        className="h-full w-full drop-shadow-[0_1px_1px_rgba(0,0,0,0.22)]"
                         role="img"
                         aria-label="Folder"
                       >
                         <defs>
-                          <linearGradient id="folderTabGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#d7f3ff" />
-                            <stop offset="100%" stopColor="#94d9f7" />
+                          <linearGradient id={`${iconIdBase}-tab`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#63bee8" />
+                            <stop offset="100%" stopColor="#4baeda" />
                           </linearGradient>
-                          <linearGradient id="folderBodyGrad" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#9adcf8" />
-                            <stop offset="52%" stopColor="#66c3eb" />
-                            <stop offset="100%" stopColor="#36a9dd" />
+                          <linearGradient id={`${iconIdBase}-body`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#67bfe7" />
+                            <stop offset="100%" stopColor="#43a7d7" />
+                          </linearGradient>
+                          <linearGradient id={`${iconIdBase}-shine`} x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#ffffff" stopOpacity="0.75" />
+                            <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
                           </linearGradient>
                         </defs>
 
                         <path
-                          d="M24 28 H78 C84 28 88 31 91 36 H143 C151 36 156 41 156 49 V55 H24 Z"
-                          fill="url(#folderTabGrad)"
-                          stroke="#4aa1cc"
-                          strokeWidth="2"
+                          d="M16 34 C16 27 22 22 29 22 H74 C82 22 86 24 90 30 L95 36 H160 C168 36 173 41 173 49 V58 H16 Z"
+                          fill={`url(#${iconIdBase}-tab)`}
+                          stroke="#5da8ce"
+                          strokeWidth="1"
                           strokeLinejoin="round"
                         />
 
-                        <rect
-                          x="16"
-                          y="42"
-                          width="148"
-                          height="62"
-                          rx="10"
-                          fill="url(#folderBodyGrad)"
-                          stroke="#3f97c1"
-                          strokeWidth="2"
-                        />
-
                         <path
-                          d="M19 55 H161"
-                          stroke="#c7f0ff"
-                          strokeOpacity="0.7"
-                          strokeWidth="2"
+                          d="M24 37 H158"
+                          stroke="#f5ffff"
+                          strokeOpacity="0.72"
+                          strokeWidth="4"
                           strokeLinecap="round"
                         />
+
+                        <rect
+                          x="14"
+                          y="44"
+                          width="160"
+                          height="70"
+                          rx="11"
+                          fill={`url(#${iconIdBase}-body)`}
+                          stroke="#5da8ce"
+                          strokeWidth="1"
+                        />
+
+                        <rect x="19" y="49" width="150" height="24" rx="8" fill={`url(#${iconIdBase}-shine)`} />
                       </svg>
                     </div>
                   </button>
@@ -4269,11 +4275,19 @@ ${getSourceContext()}
                       className="w-36 rounded-md border border-slate-300 bg-white px-2 py-1 text-center text-sm font-medium text-slate-800 focus:outline-none focus:ring-2 focus:ring-sky-300"
                     />
                   ) : (
-                    <p className="max-w-[170px] break-words text-center text-[17px] leading-tight font-semibold text-slate-800">
+                    <p
+                      className="max-w-[162px] break-words text-center text-[16px] leading-[1.12] font-normal text-[#1b1b1b]"
+                      style={{ fontFamily: "-apple-system, 'SF Pro Text', 'Segoe UI', sans-serif" }}
+                    >
                       {folder.name}
                     </p>
                   )}
-                  <p className="mt-1 text-[12px] font-medium text-slate-500">{itemCount} items</p>
+                  <p
+                    className="mt-0.5 text-[13px] font-normal text-[#8d8d8d]"
+                    style={{ fontFamily: "-apple-system, 'SF Pro Text', 'Segoe UI', sans-serif" }}
+                  >
+                    {itemCount} items
+                  </p>
 
                   <div className="mt-2 flex items-center gap-1 opacity-0 transition group-hover:opacity-100">
                     <button
