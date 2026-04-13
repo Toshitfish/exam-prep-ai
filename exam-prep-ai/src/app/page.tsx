@@ -3833,19 +3833,7 @@ ${getSourceContext()}
 
     setAuthError(null);
 
-    if (authMode === "signup") {
-      const registerResponse = await fetch("/api/auth/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
-      });
-
-      if (!registerResponse.ok) {
-        const result = (await registerResponse.json().catch(() => ({}))) as { error?: string };
-        setAuthError(result.error || "Failed to create account.");
-        return;
-      }
-    }
+    // Removed signup logic since 'authMode' is no longer present.
 
     const result = await signIn("credentials", {
       email,
