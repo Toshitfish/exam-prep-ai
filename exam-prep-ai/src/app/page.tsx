@@ -1354,7 +1354,7 @@ export default function Home() {
         setWorkspaceFolders(parsedFolders);
         setFolderWorkspaceStates(parsedFolderStates);
         setActiveWorkspaceFolderId(resolvedFolderId);
-        setAutoOpenLastWorkspaceFromHome(Boolean((workspace.drafts as Partial<PersistedDrafts>).autoOpenLastWorkspaceFromHome));
+
 
         const activeFolderState = parsedFolderStates[resolvedFolderId] ?? {
           sourceLibrary: nextSources,
@@ -1462,7 +1462,7 @@ export default function Home() {
         workspaceFolders: normalizedFolders,
         activeWorkspaceFolderId,
         folderWorkspaceStates: mergedFolderStates,
-        autoOpenLastWorkspaceFromHome,
+
       },
     };
 
@@ -1540,7 +1540,7 @@ export default function Home() {
     workspaceFolders,
     activeWorkspaceFolderId,
     folderWorkspaceStates,
-    autoOpenLastWorkspaceFromHome,
+
   ]);
 
   const getGreeting = () => {
@@ -3365,7 +3365,7 @@ ${getSourceContext()}
 
   const enterDesktop = () => {
     animateCoverExit(() => {
-      setActiveView(autoOpenLastWorkspaceFromHome ? "workspace" : "home");
+      setActiveView("workspace");
     });
   };
 
@@ -3691,7 +3691,7 @@ ${getSourceContext()}
         workspaceFolders,
         activeWorkspaceFolderId,
         folderWorkspaceStates: mergedFolderStates,
-        autoOpenLastWorkspaceFromHome,
+
       },
     };
 
@@ -4187,8 +4187,7 @@ ${getSourceContext()}
           <label className="inline-flex items-center gap-2 text-xs font-medium text-[#5f5f5f]">
             <input
               type="checkbox"
-              checked={autoOpenLastWorkspaceFromHome}
-              onChange={(event) => setAutoOpenLastWorkspaceFromHome(event.target.checked)}
+
               className="h-3.5 w-3.5 rounded border-slate-300"
             />
             Auto-open last workspace
