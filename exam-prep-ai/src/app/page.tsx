@@ -9,6 +9,7 @@ import { Inter } from "next/font/google";
 import { useDropzone } from "react-dropzone";
 import { AnimatePresence, motion } from "framer-motion";
 import {
+  ArrowRight,
   ArrowUp,
   BarChart3,
   BadgeDollarSign,
@@ -28,9 +29,11 @@ import {
   PencilLine,
   Paperclip,
   Plus,
+  Sparkles,
   ShieldCheck,
   SlidersHorizontal,
   Settings,
+  Target,
   Timer,
   TrendingUp,
   UploadCloud,
@@ -828,6 +831,7 @@ export default function Home() {
   const isAuthenticated = authStatus === "authenticated";
   const isAuthLoading = authStatus === "loading";
   const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
+  const [showAuthPanel, setShowAuthPanel] = useState(false);
   const [authNameInput, setAuthNameInput] = useState("");
   const [authEmailInput, setAuthEmailInput] = useState("");
   const [authPasswordInput, setAuthPasswordInput] = useState("");
@@ -5174,85 +5178,202 @@ ${getSourceContext()}
 
   if (!isAuthenticated) {
     return (
-      <main className={`${bodyFont.className} app-ui-chrome flex min-h-dvh w-full items-center justify-center bg-slate-100 p-4 text-slate-800`}>
-        <div className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-xl sm:p-8">
-          <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-indigo-600">ExamOS Access</p>
-          <h1 className={`${headingFont.className} mb-2 text-3xl font-semibold text-slate-900`}>
-            {authMode === "signin" ? "Sign in" : "Create account"}
-          </h1>
-          <p className="mb-6 text-sm text-slate-500">
-            {authMode === "signin"
-              ? "Use your account to continue your revision workspace."
-              : "Create a real account to sync secure login sessions."}
-          </p>
-
-          <form className="space-y-4" onSubmit={handleSignIn}>
-            {authMode === "signup" ? (
-              <label className="block text-sm font-medium text-slate-700">
-                Display name (optional)
-                <input
-                  type="text"
-                  value={authNameInput}
-                  onChange={(event) => setAuthNameInput(event.target.value)}
-                  className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                  placeholder="Scholar"
-                />
-              </label>
-            ) : null}
-
-            <label className="block text-sm font-medium text-slate-700">
-              Email
-              <input
-                type="email"
-                value={authEmailInput}
-                onChange={(event) => setAuthEmailInput(event.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                placeholder="you@example.com"
-                required
-              />
-            </label>
-
-            <label className="block text-sm font-medium text-slate-700">
-              Password
-              <input
-                type="password"
-                value={authPasswordInput}
-                onChange={(event) => setAuthPasswordInput(event.target.value)}
-                className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
-                placeholder="At least 6 characters"
-                required
-              />
-            </label>
-
-            {authError ? <p className="text-sm text-rose-600">{authError}</p> : null}
-
-            <button
-              type="submit"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
-            >
-              <LogIn size={16} /> {authMode === "signin" ? "Continue to ExamOS" : "Create account and continue"}
-            </button>
-
-            <button
-              type="button"
-              onClick={handleGoogleSignIn}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              <Globe size={16} /> {authMode === "signin" ? "Continue with Google" : "Sign up with Google"}
-            </button>
-          </form>
-
-          <button
-            type="button"
-            onClick={() => {
-              setAuthError(null);
-              setAuthMode((mode) => (mode === "signin" ? "signup" : "signin"));
-            }}
-            className="mt-4 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+      <main className={`${bodyFont.className} app-ui-chrome min-h-dvh w-full bg-slate-50 text-slate-900 selection:bg-indigo-100 selection:text-indigo-900`}>
+        <section className="relative flex min-h-[78vh] flex-col items-center justify-center overflow-hidden px-6 py-16 text-center">
+          <div className="pointer-events-none absolute -top-24 left-1/2 h-[520px] w-[520px] -translate-x-1/2 rounded-full bg-indigo-200/45 blur-[100px]" />
+          <motion.div
+            initial={{ opacity: 0, y: 18 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="relative z-10 mx-auto max-w-4xl"
           >
-            {authMode === "signin" ? "No account yet? Create one" : "Already have an account? Sign in"}
-          </button>
-        </div>
+            <div className="mx-auto mb-6 flex max-w-fit items-center gap-2 rounded-full border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-600">
+              <Sparkles size={16} />
+              <span>Introducing Journey to DSE</span>
+            </div>
+
+            <h1 className={`${headingFont.className} mb-6 text-5xl font-semibold tracking-tight text-slate-900 md:text-7xl`}>
+              Stop guessing.
+              <br className="hidden md:block" />
+              <span className="bg-gradient-to-r from-indigo-600 to-cyan-500 bg-clip-text text-transparent">Start mastering your DSE.</span>
+            </h1>
+
+            <p className="mx-auto mb-10 max-w-2xl text-lg text-slate-600 md:text-xl">
+              ExamOS maps your exact weaknesses, generates printable mock papers, and builds a daily revision engine to push you toward your target grade.
+            </p>
+
+            <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthMode("signin");
+                  setShowAuthPanel(true);
+                }}
+                className="group inline-flex items-center gap-2 rounded-full bg-indigo-600 px-8 py-4 text-base font-bold text-white shadow-lg transition hover:bg-indigo-700"
+              >
+                Start Free Diagnostic
+                <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const el = document.getElementById("landing-features");
+                  if (el) {
+                    el.scrollIntoView({ behavior: "smooth", block: "start" });
+                  }
+                }}
+                className="rounded-full px-8 py-4 text-base font-bold text-slate-700 transition hover:bg-slate-200"
+              >
+                See How It Works
+              </button>
+            </div>
+          </motion.div>
+        </section>
+
+        <section id="landing-features" className="bg-white px-6 py-24 sm:py-28">
+          <div className="mx-auto max-w-7xl">
+            <div className="mb-16 text-center">
+              <h2 className={`${headingFont.className} text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl`}>
+                Everything you need to secure a 5**
+              </h2>
+            </div>
+
+            <div className="grid gap-8 md:grid-cols-3">
+              <motion.div whileHover={{ y: -5 }} className="rounded-3xl border border-slate-100 bg-slate-50 p-8 shadow-sm">
+                <div className="mb-6 inline-flex rounded-xl bg-indigo-100 p-3 text-indigo-600">
+                  <Target size={24} />
+                </div>
+                <h3 className="mb-3 text-xl font-bold text-slate-900">Smart Diagnostic Map</h3>
+                <p className="text-slate-600">Take a baseline test and get a weakness map down to micro-skill level.</p>
+              </motion.div>
+
+              <motion.div whileHover={{ y: -5 }} className="rounded-3xl border border-slate-100 bg-slate-50 p-8 shadow-sm">
+                <div className="mb-6 inline-flex rounded-xl bg-cyan-100 p-3 text-cyan-600">
+                  <BookOpen size={24} />
+                </div>
+                <h3 className="mb-3 text-xl font-bold text-slate-900">Pixel-Perfect Mock Papers</h3>
+                <p className="text-slate-600">Generate exam-style papers with strong formatting and real-paper structure.</p>
+              </motion.div>
+
+              <motion.div whileHover={{ y: -5 }} className="rounded-3xl border border-slate-100 bg-slate-50 p-8 shadow-sm">
+                <div className="mb-6 inline-flex rounded-xl bg-emerald-100 p-3 text-emerald-600">
+                  <TrendingUp size={24} />
+                </div>
+                <h3 className="mb-3 text-xl font-bold text-slate-900">Mark Recovery Tracker</h3>
+                <p className="text-slate-600">Track lost marks and run daily missions that recover score consistently.</p>
+              </motion.div>
+            </div>
+          </div>
+        </section>
+
+        <AnimatePresence>
+          {showAuthPanel ? (
+            <motion.div
+              className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/45 px-4"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+            >
+              <motion.div
+                initial={{ y: 20, opacity: 0, scale: 0.98 }}
+                animate={{ y: 0, opacity: 1, scale: 1 }}
+                exit={{ y: 16, opacity: 0, scale: 0.98 }}
+                transition={{ duration: 0.2 }}
+                className="w-full max-w-md rounded-3xl border border-slate-200 bg-white p-6 shadow-2xl sm:p-8"
+              >
+                <div className="mb-2 flex items-start justify-between gap-3">
+                  <div>
+                    <p className="mb-1 text-xs font-semibold uppercase tracking-[0.14em] text-indigo-600">ExamOS Access</p>
+                    <h2 className={`${headingFont.className} text-3xl font-semibold text-slate-900`}>
+                      {authMode === "signin" ? "Sign in" : "Create account"}
+                    </h2>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setShowAuthPanel(false)}
+                    className="rounded-lg p-1 text-slate-500 transition hover:bg-slate-100 hover:text-slate-700"
+                    aria-label="Close authentication panel"
+                  >
+                    <X size={18} />
+                  </button>
+                </div>
+
+                <p className="mb-6 text-sm text-slate-500">
+                  {authMode === "signin"
+                    ? "Use your account to continue your revision workspace."
+                    : "Create a real account to sync secure login sessions."}
+                </p>
+
+                <form className="space-y-4" onSubmit={handleSignIn}>
+                  {authMode === "signup" ? (
+                    <label className="block text-sm font-medium text-slate-700">
+                      Display name (optional)
+                      <input
+                        type="text"
+                        value={authNameInput}
+                        onChange={(event) => setAuthNameInput(event.target.value)}
+                        className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                        placeholder="Scholar"
+                      />
+                    </label>
+                  ) : null}
+
+                  <label className="block text-sm font-medium text-slate-700">
+                    Email
+                    <input
+                      type="email"
+                      value={authEmailInput}
+                      onChange={(event) => setAuthEmailInput(event.target.value)}
+                      className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      placeholder="you@example.com"
+                      required
+                    />
+                  </label>
+
+                  <label className="block text-sm font-medium text-slate-700">
+                    Password
+                    <input
+                      type="password"
+                      value={authPasswordInput}
+                      onChange={(event) => setAuthPasswordInput(event.target.value)}
+                      className="mt-1.5 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+                      placeholder="At least 6 characters"
+                      required
+                    />
+                  </label>
+
+                  {authError ? <p className="text-sm text-rose-600">{authError}</p> : null}
+
+                  <button
+                    type="submit"
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-indigo-700"
+                  >
+                    <LogIn size={16} /> {authMode === "signin" ? "Continue to ExamOS" : "Create account and continue"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleGoogleSignIn}
+                    className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
+                  >
+                    <Globe size={16} /> {authMode === "signin" ? "Continue with Google" : "Sign up with Google"}
+                  </button>
+                </form>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAuthError(null);
+                    setAuthMode((mode) => (mode === "signin" ? "signup" : "signin"));
+                  }}
+                  className="mt-4 w-full rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-600 transition hover:bg-slate-50"
+                >
+                  {authMode === "signin" ? "No account yet? Create one" : "Already have an account? Sign in"}
+                </button>
+              </motion.div>
+            </motion.div>
+          ) : null}
+        </AnimatePresence>
       </main>
     );
   }
