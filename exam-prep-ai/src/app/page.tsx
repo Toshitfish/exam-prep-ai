@@ -4207,8 +4207,51 @@ ${getSourceContext()}
                     aria-label={`Open ${folder.name}`}
                   >
                     <div className={`relative h-24 w-40 ${folder.id === activeWorkspaceFolderId ? "scale-[1.03]" : ""}`}>
-                      <div className="absolute top-2 left-3 h-5 w-16 rounded-t-lg border-2 border-[#2f8cb6] border-b-0 bg-gradient-to-b from-[#c6efff] to-[#7fd3f5]" />
-                      <div className="absolute top-5 left-0 h-[68px] w-full rounded-2xl border-2 border-[#2f8cb6] bg-gradient-to-b from-[#99dcf8] via-[#63c2ea] to-[#35a9db] shadow-[0_8px_18px_rgba(53,169,219,0.35),inset_0_1px_0_rgba(255,255,255,0.65)]" />
+                      <svg
+                        viewBox="0 0 180 120"
+                        className="h-full w-full drop-shadow-[0_8px_14px_rgba(57,149,196,0.35)]"
+                        role="img"
+                        aria-label="Folder"
+                      >
+                        <defs>
+                          <linearGradient id="folderTabGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#d7f3ff" />
+                            <stop offset="100%" stopColor="#94d9f7" />
+                          </linearGradient>
+                          <linearGradient id="folderBodyGrad" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0%" stopColor="#9adcf8" />
+                            <stop offset="52%" stopColor="#66c3eb" />
+                            <stop offset="100%" stopColor="#36a9dd" />
+                          </linearGradient>
+                        </defs>
+
+                        <path
+                          d="M24 28 H78 C84 28 88 31 91 36 H143 C151 36 156 41 156 49 V55 H24 Z"
+                          fill="url(#folderTabGrad)"
+                          stroke="#4aa1cc"
+                          strokeWidth="2"
+                          strokeLinejoin="round"
+                        />
+
+                        <rect
+                          x="16"
+                          y="42"
+                          width="148"
+                          height="62"
+                          rx="10"
+                          fill="url(#folderBodyGrad)"
+                          stroke="#3f97c1"
+                          strokeWidth="2"
+                        />
+
+                        <path
+                          d="M19 55 H161"
+                          stroke="#c7f0ff"
+                          strokeOpacity="0.7"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                        />
+                      </svg>
                     </div>
                   </button>
 
