@@ -5202,18 +5202,35 @@ ${getSourceContext()}
               ExamOS maps your exact weaknesses, generates printable mock papers, and builds a daily revision engine to push you toward your target grade.
             </p>
 
-            <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
-              <button
-                type="button"
-                onClick={() => {
+            <div className="flex w-full flex-col items-center justify-center gap-4">
+              <form
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  const formData = new FormData(event.currentTarget);
+                  const email = String(formData.get("landing-email") || "").trim();
+                  setAuthError(null);
                   setAuthMode("signin");
+                  setAuthEmailInput(email);
                   setShowAuthPanel(true);
                 }}
-                className="group inline-flex items-center gap-2 rounded-full bg-indigo-600 px-8 py-4 text-base font-bold text-white shadow-lg transition hover:bg-indigo-700"
+                className="flex w-full max-w-md items-center rounded-full border border-white/60 bg-white/50 p-1.5 shadow-[0_8px_30px_rgb(0,0,0,0.08)] backdrop-blur-xl transition-all focus-within:border-blue-400 focus-within:bg-white/80 focus-within:ring-4 focus-within:ring-blue-400/20 sm:max-w-lg"
               >
-                Start Free Diagnostic
-                <ArrowRight size={18} className="transition-transform group-hover:translate-x-1" />
-              </button>
+                <input
+                  type="email"
+                  name="landing-email"
+                  placeholder="Enter your email to start..."
+                  className="w-full flex-1 bg-transparent px-5 py-2 text-[15px] font-medium text-slate-800 placeholder-slate-500 outline-none"
+                  required
+                />
+                <button
+                  type="submit"
+                  className="group flex shrink-0 items-center gap-1.5 rounded-full bg-blue-500 px-5 py-2 text-[15px] font-medium text-white shadow-sm transition-all hover:bg-blue-600 active:scale-95"
+                >
+                  Start
+                  <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" />
+                </button>
+              </form>
+
               <button
                 type="button"
                 onClick={() => {
@@ -5222,9 +5239,9 @@ ${getSourceContext()}
                     el.scrollIntoView({ behavior: "smooth", block: "start" });
                   }
                 }}
-                className="rounded-full px-8 py-4 text-base font-bold text-slate-700 transition hover:bg-slate-200"
+                className="text-[13px] font-medium text-slate-500 transition-colors hover:text-slate-800"
               >
-                See How It Works
+                Or see how it works
               </button>
             </div>
           </motion.div>
