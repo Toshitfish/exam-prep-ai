@@ -80,6 +80,8 @@ const MOCK_PAPER_A4_WIDTH_PX = 794;
 const MOCK_PAPER_A4_HEIGHT_PX = Math.round(MOCK_PAPER_A4_WIDTH_PX * A4_RATIO_PORTRAIT);
 const WORKSPACE_LOCAL_STORAGE_KEY_PREFIX = "examos-workspace";
 const PDFJS_WORKER_CDN = "https://unpkg.com/pdfjs-dist@5.6.205/legacy/build/pdf.worker.min.mjs";
+const HTML2CANVAS_CDN = "https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js";
+const JSPDF_CDN = "https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js";
 const TOOL_CREDIT_COSTS = {
   timedSection: 0,
   parsePdf: 1,
@@ -1952,16 +1954,51 @@ export default function Home() {
       const templatePageCount = templateLayoutProfile?.pageCount ?? getTemplateReplicaBlueprint().pageCount;
       if (templatePageCount > 1) {
         const allLines = merged.split("\n");
-        const chunkSize = Math.max(1, Math.ceil(allLines.length / templatePageCount));
         const chunkedPages: string[] = [];
+        const isBoundaryLine = (line: string) =>
+          /^(Section\s+[A-Z0-9]|Question\s*\d+|Q\d+|Mark\s*Scheme|Instructions\s+to\s+Candidates|Part\s+[A-Z0-9]|Source\s+[A-Z0-9])/i.test(
+            line.trim(),
+          );
+
+        let cursor = 0;
 
         for (let i = 0; i < templatePageCount; i += 1) {
-          const start = i * chunkSize;
-          const end = i === templatePageCount - 1 ? allLines.length : (i + 1) * chunkSize;
-          const chunk = allLines.slice(start, end).join("\n").trim();
+          const remainingPages = templatePageCount - i;
+          const remainingLines = allLines.length - cursor;
+          if (remainingLines <= 0) {
+            break;
+          }
+
+          let end = allLines.length;
+          if (remainingPages > 1) {
+            const targetEnd = cursor + Math.max(1, Math.ceil(remainingLines / remainingPages));
+            const searchStart = Math.max(cursor + 8, targetEnd - 14);
+            const searchEnd = Math.min(allLines.length - 1, targetEnd + 14);
+
+            let bestBoundary = -1;
+            let bestDistance = Number.POSITIVE_INFINITY;
+
+            for (let pos = searchStart; pos <= searchEnd; pos += 1) {
+              const candidate = allLines[pos] ?? "";
+              if (!isBoundaryLine(candidate)) {
+                continue;
+              }
+
+              const distance = Math.abs(pos - targetEnd);
+              if (distance < bestDistance) {
+                bestBoundary = pos;
+                bestDistance = distance;
+              }
+            }
+
+            end = bestBoundary > cursor + 4 ? bestBoundary : targetEnd;
+          }
+
+          const chunk = allLines.slice(cursor, end).join("\n").trim();
           if (chunk) {
             chunkedPages.push(chunk);
           }
+          cursor = end;
         }
 
         if (chunkedPages.length > 1) {
@@ -2137,23 +2174,111 @@ export default function Home() {
       .map((node) => node.outerHTML)
       .join("\n");
 
-    return `<!doctype html><html><head><meta charset="utf-8" /><base href="${window.location.origin}/" /><title>${fileNameBase}</title>${headStyles}<style>
+    const pageStyle =
+      format === "pdf"
+        ? `
+      @page { size: A4 portrait; margin: 0; }
+      html, body { margin: 0; padding: 0; background: #fff; }
+      .export-wrap { width: 210mm; max-width: 210mm; margin: 0 auto; padding: 0; }
+      .mock-paper-preview-page {
+        box-sizing: border-box;
+        width: 210mm !important;
+        max-width: 210mm !important;
+        min-height: 297mm !important;
+        height: 297mm !important;
+        margin: 0 !important;
+        border: 0 !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        overflow: hidden;
+        page-break-after: always;
+        break-after: page;
+      }
+      .mock-paper-preview-page:last-child { page-break-after: auto; break-after: auto; }
+      @media print {
+        html, body { width: 210mm; background: #fff; }
+        .export-wrap { width: 210mm; max-width: 210mm; margin: 0; padding: 0; }
+        .mock-paper-preview-page { width: 210mm !important; height: 297mm !important; min-height: 297mm !important; }
+      }
+      `
+        : `
       @page { size: A4 portrait; margin: 10mm; }
       body { margin: 0; background: #eef2f7; }
       .export-wrap { max-width: 860px; margin: 18px auto; padding: 0 8px 18px; }
       .mock-paper-preview-page { box-sizing: border-box; width: ${MOCK_PAPER_A4_WIDTH_PX}px; max-width: ${MOCK_PAPER_A4_WIDTH_PX}px; height: ${MOCK_PAPER_A4_HEIGHT_PX}px; min-height: ${MOCK_PAPER_A4_HEIGHT_PX}px; aspect-ratio: 210 / 297; page-break-after: always; overflow: hidden; }
       .mock-paper-preview-page:last-child { page-break-after: auto; }
-      @media all {
-        .mock-paper-preview-page { break-after: page; }
-      }
+      @media all { .mock-paper-preview-page { break-after: page; } }
       @media print {
         body { background: #fff; }
         .export-wrap { max-width: none; margin: 0; padding: 0; }
       }
-    </style></head><body><main class="export-wrap">${pagesHtml}</main></body></html>`;
+      `;
+
+    return `<!doctype html><html><head><meta charset="utf-8" /><base href="${window.location.origin}/" /><title>${fileNameBase}</title>${headStyles}<style>${pageStyle}</style></head><body><main class="export-wrap">${pagesHtml}</main></body></html>`;
   };
 
-  const exportMockPaperOutput = (format: "doc" | "pdf") => {
+  const loadExternalScript = (src: string, id: string) =>
+    new Promise<void>((resolve, reject) => {
+      if (document.getElementById(id)) {
+        resolve();
+        return;
+      }
+
+      const script = document.createElement("script");
+      script.id = id;
+      script.src = src;
+      script.async = true;
+      script.onload = () => resolve();
+      script.onerror = () => reject(new Error(`Failed to load script: ${src}`));
+      document.head.appendChild(script);
+    });
+
+  const exportMockPaperPdfFile = async (fileNameBase: string) => {
+    const previewRoot = mockPaperPreviewRef.current;
+    const renderedPages = previewRoot ? Array.from(previewRoot.querySelectorAll<HTMLElement>(".mock-paper-preview-page")) : [];
+    if (renderedPages.length === 0) {
+      return false;
+    }
+
+    await loadExternalScript(HTML2CANVAS_CDN, "html2canvas-cdn");
+    await loadExternalScript(JSPDF_CDN, "jspdf-cdn");
+
+    const runtime = window as Window & {
+      html2canvas?: (element: HTMLElement, options?: Record<string, unknown>) => Promise<HTMLCanvasElement>;
+      jspdf?: { jsPDF: new (options?: Record<string, unknown>) => { addPage: () => void; addImage: (...args: unknown[]) => void; save: (name: string) => void } };
+    };
+
+    if (!runtime.html2canvas || !runtime.jspdf?.jsPDF) {
+      return false;
+    }
+
+    const JsPdf = runtime.jspdf.jsPDF;
+    const pdf = new JsPdf({ orientation: "portrait", unit: "mm", format: "a4" });
+
+    for (let index = 0; index < renderedPages.length; index += 1) {
+      const page = renderedPages[index];
+      const canvas = await runtime.html2canvas(page, {
+        backgroundColor: "#ffffff",
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        windowWidth: MOCK_PAPER_A4_WIDTH_PX,
+        windowHeight: MOCK_PAPER_A4_HEIGHT_PX,
+      });
+
+      const imageData = canvas.toDataURL("image/png");
+      if (index > 0) {
+        pdf.addPage();
+      }
+      pdf.addImage(imageData, "PNG", 0, 0, 210, 297, undefined, "FAST");
+    }
+
+    const fileName = `${fileNameBase.toLowerCase().replace(/\s+/g, "-")}.pdf`;
+    pdf.save(fileName);
+    return true;
+  };
+
+  const exportMockPaperOutput = async (format: "doc" | "pdf") => {
     const content = answerKeyOutput.trim();
     if (!content) {
       setAnswerKeyError("No generated mock paper to export.");
@@ -2175,57 +2300,7 @@ export default function Home() {
         URL.revokeObjectURL(url);
         ok = true;
       } else {
-        const frame = document.createElement("iframe");
-        frame.style.position = "fixed";
-        frame.style.right = "0";
-        frame.style.bottom = "0";
-        frame.style.width = "0";
-        frame.style.height = "0";
-        frame.style.border = "0";
-        frame.setAttribute("aria-hidden", "true");
-
-        const cleanup = () => {
-          if (frame.parentNode) {
-            frame.parentNode.removeChild(frame);
-          }
-        };
-
-        frame.onload = () => {
-          const frameWindow = frame.contentWindow;
-          if (!frameWindow) {
-            cleanup();
-            return;
-          }
-
-          const onAfterPrint = () => {
-            frameWindow.removeEventListener("afterprint", onAfterPrint);
-            cleanup();
-          };
-
-          frameWindow.addEventListener("afterprint", onAfterPrint);
-          frameWindow.focus();
-          window.setTimeout(() => {
-            frameWindow.print();
-          }, 40);
-
-          window.setTimeout(cleanup, 20000);
-        };
-
-        try {
-          document.body.appendChild(frame);
-          const doc = frame.contentDocument;
-          if (doc) {
-            doc.open();
-            doc.write(previewHtml);
-            doc.close();
-            ok = true;
-          } else {
-            cleanup();
-          }
-        } catch {
-          cleanup();
-          ok = false;
-        }
+        ok = await exportMockPaperPdfFile(fileNameBase);
       }
     } else {
       setAnswerKeyError("Preview is not ready yet. Generate the paper first, then export.");
@@ -2233,7 +2308,7 @@ export default function Home() {
     }
 
     if (!ok) {
-      setAnswerKeyError("Unable to open print dialog. Please check browser print permissions and try again.");
+      setAnswerKeyError("Unable to generate PDF file. Please refresh and try again.");
     }
   };
 
@@ -5148,7 +5223,7 @@ ${getSourceContext()}
           </select>
           <button
             type="button"
-            onClick={() => exportMockPaperOutput(answerKeyExportFormat)}
+            onClick={() => void exportMockPaperOutput(answerKeyExportFormat)}
             disabled={!answerKeyOutput.trim()}
             className="rounded-lg border border-indigo-200 bg-indigo-50 px-4 py-2 text-sm font-semibold text-indigo-700 transition hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-50"
           >
@@ -5239,37 +5314,45 @@ ${getSourceContext()}
                       <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Generated Preview</p>
                       <div className="h-[940px] overflow-y-auto rounded border border-slate-200 bg-slate-50 p-3">
                         <div className="mx-auto w-full max-w-[820px] space-y-4">
-                          {getMockPaperPages(answerKeyOutput).map((page, index) => (
-                            <div
-                              key={`mock-paper-page-wrap-${index}`}
-                              className="mx-auto"
-                              style={{
-                                width: `${MOCK_PAPER_A4_WIDTH_PX * previewScale}px`,
-                              }}
-                            >
+                          {getMockPaperPages(answerKeyOutput).map((page, index, pages) => (
+                            <div key={`mock-paper-page-wrap-${index}`} className="space-y-3">
                               <div
+                                className="mx-auto"
                                 style={{
-                                  transform: `scale(${previewScale})`,
-                                  transformOrigin: "top left",
-                                  width: `${MOCK_PAPER_A4_WIDTH_PX}px`,
+                                  width: `${MOCK_PAPER_A4_WIDTH_PX * previewScale}px`,
                                 }}
                               >
                                 <div
-                                  className="mock-paper-preview-page rounded-sm border border-slate-300 bg-white px-10 py-8 shadow-sm"
                                   style={{
+                                    transform: `scale(${previewScale})`,
+                                    transformOrigin: "top left",
                                     width: `${MOCK_PAPER_A4_WIDTH_PX}px`,
-                                    maxWidth: `${MOCK_PAPER_A4_WIDTH_PX}px`,
                                   }}
                                 >
                                   <div
-                                    className="mock-paper-preview app-ui-content prose prose-sm max-w-none font-serif leading-relaxed text-slate-800 prose-headings:font-serif prose-p:my-1 prose-li:my-0.5"
-                                    style={mockPaperTypographyStyle}
+                                    className="mock-paper-preview-page rounded-sm border border-slate-300 bg-white px-10 py-8 shadow-sm"
+                                    style={{
+                                      width: `${MOCK_PAPER_A4_WIDTH_PX}px`,
+                                      maxWidth: `${MOCK_PAPER_A4_WIDTH_PX}px`,
+                                    }}
                                   >
-                                    <ReactMarkdown remarkPlugins={[remarkGfm]}>{page}</ReactMarkdown>
+                                    <div
+                                      className="mock-paper-preview app-ui-content prose prose-sm max-w-none font-serif leading-relaxed text-slate-800 prose-headings:font-serif prose-p:my-1 prose-li:my-0.5"
+                                      style={mockPaperTypographyStyle}
+                                    >
+                                      <ReactMarkdown remarkPlugins={[remarkGfm]}>{page}</ReactMarkdown>
+                                    </div>
+                                    <div className="mt-8 border-t border-slate-200 pt-2 text-right text-[11px] text-slate-500">Page {index + 1}</div>
                                   </div>
-                                  <div className="mt-8 border-t border-slate-200 pt-2 text-right text-[11px] text-slate-500">Page {index + 1}</div>
                                 </div>
                               </div>
+                              {index < pages.length - 1 ? (
+                                <div className="mx-auto flex w-full max-w-[760px] items-center gap-3 px-2 text-[10px] font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                  <span className="h-px flex-1 bg-slate-300" />
+                                  <span>Page Break</span>
+                                  <span className="h-px flex-1 bg-slate-300" />
+                                </div>
+                              ) : null}
                             </div>
                           ))}
                         </div>
