@@ -726,7 +726,7 @@ export default function Home() {
   const [newFolderNameInput, setNewFolderNameInput] = useState("");
   const [editingFolderId, setEditingFolderId] = useState<string | null>(null);
   const [editingFolderName, setEditingFolderName] = useState("");
-  const [autoOpenLastWorkspaceFromHome, setAutoOpenLastWorkspaceFromHome] = useState(false);
+  // Removed: autoOpenLastWorkspaceFromHome, home/landing page state
 
   const [workspaceChatSections, setWorkspaceChatSections] = useState<WorkspaceChatSection[]>([createDefaultWorkspaceSection()]);
   const [activeWorkspaceChatId, setActiveWorkspaceChatId] = useState("workspace-chat-1");
@@ -746,7 +746,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const workspaceIsLoading = workspaceStatus === "submitted" || workspaceStatus === "streaming";
   const gradingIsLoading = gradingStatus === "submitted" || gradingStatus === "streaming";
-  const [activeView, setActiveView] = useState<AppView>("home");
+  const [activeView, setActiveView] = useState<AppView>("workspace");
   const [isSourceCollapsed, setIsSourceCollapsed] = useState(false);
   const [isChatCollapsed, setIsChatCollapsed] = useState(false);
   const [isEngineCollapsed, setIsEngineCollapsed] = useState(false);
@@ -830,8 +830,7 @@ export default function Home() {
   const { data: session, status: authStatus } = useSession();
   const isAuthenticated = authStatus === "authenticated";
   const isAuthLoading = authStatus === "loading";
-  const [authMode, setAuthMode] = useState<"signin" | "signup">("signin");
-  const [showAuthPanel, setShowAuthPanel] = useState(false);
+  // Removed: authMode, showAuthPanel (home/landing modal)
   const [authNameInput, setAuthNameInput] = useState("");
   const [authEmailInput, setAuthEmailInput] = useState("");
   const [authPasswordInput, setAuthPasswordInput] = useState("");
