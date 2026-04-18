@@ -5,7 +5,7 @@ import { useChat } from "@ai-sdk/react";
 import { signIn, signOut, useSession } from "next-auth/react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { Inter } from "next/font/google";
+import { Outfit, Plus_Jakarta_Sans } from "next/font/google";
 import { useDropzone } from "react-dropzone";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -37,12 +37,12 @@ import {
   X,
 } from "lucide-react";
 
-const headingFont = Inter({
+const headingFont = Outfit({
   subsets: ["latin"],
   weight: ["500", "600", "700"],
 });
 
-const bodyFont = Inter({
+const bodyFont = Plus_Jakarta_Sans({
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });
