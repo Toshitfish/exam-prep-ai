@@ -4823,11 +4823,20 @@ ${getSourceContext()}
           <div className="grid grid-cols-1 md:grid-cols-2">
             <div className="border-b border-slate-200/70 p-6 md:border-r md:border-b-0 md:p-12">
               <p className="mb-2 text-sm font-semibold uppercase tracking-[0.16em] text-indigo-600">ExamOS</p>
-              <h1 className={`${headingFont.className} mb-2 text-4xl font-semibold leading-tight text-slate-900 md:text-5xl`}>
-                {getGreeting()},
+              <motion.h1
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, ease: "easeOut" }}
+                className={`${headingFont.className} mb-2 text-5xl md:text-6xl font-extrabold tracking-tight`}
+              >
+                <span className="bg-gradient-to-r from-indigo-600 via-violet-600 to-fuchsia-600 bg-clip-text text-transparent">
+                  {getGreeting()},
+                </span>
                 <br />
-                {learnerName}.
-              </h1>
+                <span className="text-slate-900">
+                  {learnerName}
+                </span>
+              </motion.h1>
               <p className="mb-6 max-w-lg text-base text-slate-600 md:text-lg">Your revision cockpit is online. Pick one mission and move.</p>
 
               <div className="mb-6 rounded-2xl border border-indigo-100 bg-indigo-50/80 p-4">
